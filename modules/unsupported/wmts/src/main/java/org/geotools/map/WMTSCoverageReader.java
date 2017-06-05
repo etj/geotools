@@ -45,7 +45,7 @@ import org.opengis.referencing.operation.TransformException;
 /**
  * A grid coverage readers backing onto a WMTS server by issuing GetTile requests
  */
-class WMTSCoverageReader extends AbstractGridCoverage2DReader {
+public class WMTSCoverageReader extends AbstractGridCoverage2DReader {
 
     /** The logger for the map module. */
     static public final Logger LOGGER = org.geotools.util.logging.Logging

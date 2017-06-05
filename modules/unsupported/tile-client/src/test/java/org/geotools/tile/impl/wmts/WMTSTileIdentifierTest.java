@@ -16,10 +16,15 @@
  */
 package org.geotools.tile.impl.wmts;
 
+import java.io.File;
+import java.net.URISyntaxException;
+import java.net.URL;
 import org.geotools.tile.TileIdentifier;
 import org.geotools.tile.TileIdentifierTest;
 import org.geotools.tile.impl.ZoomLevel;
 import org.junit.Assert;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.fail;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -35,11 +40,24 @@ public class WMTSTileIdentifierTest extends TileIdentifierTest {
     };
     @Before
     public void setup() {
-        String kvpUrl = "http://raspberrypi:8080/geoserver/gwc/service/wmts?REQUEST=GetCapabilities";
-        service = new WMTSService("kvp", kvpUrl, "topp:states", "EPSG:900913",
-                WMTSServiceType.KVP);
-        
+        service = createKVPService();
     }
+
+    private WMTSService createKVPService() {
+        try {
+            URL capaKvp = getClass().getClassLoader().getResource("getcapa_kvp.xml");
+            assertNotNull(capaKvp);
+            File capaKvpFile = new File(capaKvp.toURI());
+
+            String baseURL = "http://demo.geo-solutions.it/geoserver/gwc/service/wmts?REQUEST=getcapabilities";
+            return new WMTSService("states", baseURL, "unesco:Unesco_point", "EPSG:4326", WMTSServiceType.KVP, capaKvpFile);
+
+        } catch (URISyntaxException ex) {
+            fail(ex.getMessage());
+            return null;
+        }
+    }
+
     @Test
     public void testGetId() {
         

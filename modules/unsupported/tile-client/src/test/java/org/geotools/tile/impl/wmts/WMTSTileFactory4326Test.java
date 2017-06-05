@@ -16,15 +16,23 @@
  */
 package org.geotools.tile.impl.wmts;
 
+import java.io.File;
+import java.net.URISyntaxException;
+import java.net.URL;
 import org.geotools.geometry.jts.ReferencedEnvelope;
+import org.geotools.referencing.CRS;
 import org.geotools.referencing.crs.DefaultGeographicCRS;
 import org.geotools.tile.Tile;
 import org.geotools.tile.TileFactory;
 import org.geotools.tile.TileFactoryTest;
 import org.geotools.tile.TileService;
-import org.geotools.tile.impl.WebMercatorTileFactory;
+
 import org.junit.Assert;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import org.junit.Test;
+import org.opengis.referencing.FactoryException;
 
 public class WMTSTileFactory4326Test extends TileFactoryTest {
     class TestPoint {
@@ -63,11 +71,24 @@ public class WMTSTileFactory4326Test extends TileFactoryTest {
         TileService[] services = new TileService[2];
         for (WMTSServiceType t : WMTSServiceType.values()) {
             
-            services[i++] = createService(t);
+            services[i++] = createKVPService(); // TODO: create a testpoint array for REST too
+
         }
-        TestPoint[] tests = {new TestPoint(90, -180, 2, 0, 0),new TestPoint(75, -173, 2, 0, 0),new TestPoint(90, -180, 0, 0, 0), new TestPoint(0, 0, 3, 3, 7),new TestPoint(0, 0, 2, 1, 3),new TestPoint(0, 0, 1, 0, 1),new TestPoint(50, -70, 0, 0, 0), new TestPoint(50, 70, 0, 0, 1),
-                new TestPoint(-50, -70, 1, 1, 1), new TestPoint(50, 70, 1, 0, 2),new TestPoint(50, -70, 1, 0, 1), new TestPoint(-50, 70, 1, 1, 2)
-                };
+        TestPoint[] tests = {
+            new TestPoint(90, -180, 2, 0, 0),
+            new TestPoint(75, -173, 2, 0, 0),
+            new TestPoint(90, -180, 0, 0, 0),
+            new TestPoint(0, 0, 3, 3, 7),
+            new TestPoint(0, 0, 2, 1, 3),
+            new TestPoint(0, 0, 1, 0, 1),
+            new TestPoint(50, -70, 0, 0, 0),
+            new TestPoint(50, 70, 0, 0, 1),
+            new TestPoint(-50, -70, 1, 1, 1),
+            new TestPoint(50, 70, 1, 0, 2),
+            new TestPoint(50, -70, 1, 0, 1),
+            new TestPoint(-50, 70, 1, 1, 2)
+        };
+        
         for (TestPoint tp : tests) {
             for (int i1=0;i1<2;i1++) {
                 TileService service = services[i1];
@@ -125,11 +146,19 @@ public class WMTSTileFactory4326Test extends TileFactoryTest {
     }
 
     @Test
-    public void testGetExtentFromTileName() {
+    public void testGetExtentFromTileName() throws FactoryException {
 
-        for (WMTSServiceType t : WMTSServiceType.values()) {
-            TileService service = createService(t);
-         // For some reason map proxy has an extra level compared to GeoServer!
+        WMTSService services[] = {
+            createRESTService(),
+            createKVPService()};
+
+        ReferencedEnvelope expectedEnv[] = {
+            new ReferencedEnvelope(1102848.0, 2151424.0, -951424.0, 97152.0, CRS.decode("EPSG:31287")),
+            new ReferencedEnvelope(-90, 0.00, -90.0, 0.0, DefaultGeographicCRS.WGS84)};
+
+        for (int i = 0; i < 2; i++) {
+            TileService service = services[i];
+            // For some reason map proxy has an extra level compared to GeoServer!
             int offset = 0;
             if (((WMTSService)service).getType().equals(WMTSServiceType.REST)) {
                 offset = 1;
@@ -143,27 +172,51 @@ public class WMTSTileFactory4326Test extends TileFactoryTest {
 
             Assert.assertEquals(tile.getExtent(), env);
 
-            ReferencedEnvelope expectedEnv = new ReferencedEnvelope(-90, 0.00, -90.0,
-                    0.0, DefaultGeographicCRS.WGS84);
-
-            Assert.assertEquals(expectedEnv.getMinX(), env.getMinX(), 0.001);
-            Assert.assertEquals(expectedEnv.getMinY(), env.getMinY(), 0.001);
-            Assert.assertEquals(expectedEnv.getMaxX(), env.getMaxX(), 0.001);
-            Assert.assertEquals(expectedEnv.getMaxY(), env.getMaxY(), 0.001);
+            Assert.assertEquals(service.getName(), expectedEnv[i].getMinX(), env.getMinX(), 0.001);
+            Assert.assertEquals(service.getName(), expectedEnv[i].getMinY(), env.getMinY(), 0.001);
+            Assert.assertEquals(service.getName(), expectedEnv[i].getMaxX(), env.getMaxX(), 0.001);
+            Assert.assertEquals(service.getName(), expectedEnv[i].getMaxY(), env.getMaxY(), 0.001);
         }
     }
 
     private TileService createService(WMTSServiceType type) {
 
-        // TODO: replace with local files
         if (WMTSServiceType.REST.equals(type)) {
-            String baseURL = "http://raspberrypi:9000/wmts/1.0.0/WMTSCapabilities.xml";
-            return new WMTSService("states", baseURL, "states", "epsg4326", type);
+            return createRESTService();
         } else {
-            String baseURL = "http://raspberrypi:8080/geoserver/gwc/service/wmts?REQUEST=GetCapabilities";
-            return new WMTSService("states", baseURL, "states", "EPSG:4326", type);
+            return createKVPService();
         }
+    }
 
+    private WMTSService createRESTService() {
+        try {
+            URL capaResource = getClass().getClassLoader().getResource("WMTSCapabilities.xml");
+            assertNotNull("Can't find REST getCapa resource", capaResource);
+            File capaFile = new File(capaResource.toURI());
+            assertTrue("Can't find REST getCapa file", capaFile.exists());
+
+            String baseURL = "XXXhttp://wmsx.zamg.ac.at/mapcacheStatmap/wmts/1.0.0/WMTSCapabilities.xml";
+            return new WMTSService("REST", baseURL, "grey", "statmap", WMTSServiceType.REST, capaFile);
+
+        } catch (URISyntaxException ex) {
+            fail(ex.getMessage());
+            return null;
+        }
+    }
+
+    private WMTSService createKVPService() {
+        try {
+            URL capaKvp = getClass().getClassLoader().getResource("getcapa_kvp.xml");
+            assertNotNull(capaKvp);
+            File capaKvpFile = new File(capaKvp.toURI());
+
+            String baseURL = "http://demo.geo-solutions.it/geoserver/gwc/service/wmts?REQUEST=getcapabilities";
+            return new WMTSService("KVP", baseURL, "unesco:Unesco_point", "EPSG:4326", WMTSServiceType.KVP, capaKvpFile);
+
+        } catch (URISyntaxException ex) {
+            fail(ex.getMessage());
+            return null;
+        }
     }
 
     protected TileFactory createFactory() {

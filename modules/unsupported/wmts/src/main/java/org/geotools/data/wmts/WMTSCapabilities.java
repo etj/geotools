@@ -355,10 +355,10 @@ public class WMTSCapabilities extends Capabilities {
     }
 
     /**
-     * @param rest
+     * @param type
      */
-    private void setType(WMTSServiceType rest) {
-        this.type = rest;
+    private void setType(WMTSServiceType type) {
+        this.type = type;
 
     }
 

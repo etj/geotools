@@ -23,7 +23,6 @@ import org.geotools.tile.Tile;
 import org.geotools.tile.TileService;
 import org.geotools.tile.impl.WebMercatorZoomLevel;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 /**
@@ -37,9 +36,9 @@ public class WMTSTileOnLineTest extends OnlineTestCase {
     @Override
     protected void setUpInternal() throws Exception {
         URL serverURL = new URL(fixture.getProperty("kvp_server"));
-        TileService kvpService = new WMTSService("states", serverURL.toExternalForm(),"topp:states","epsg:900913", WMTSServiceType.KVP);
+        TileService kvpService = new WMTSService("states", serverURL.toExternalForm(),"topp:states","epsg:900913", WMTSServiceType.KVP, null);
         URL restWMTS = new URL(fixture.getProperty("rest_server"));
-        TileService restService = new WMTSService("states", restWMTS.toExternalForm(),"topp:states","epsg4326", WMTSServiceType.REST);
+        TileService restService = new WMTSService("states", restWMTS.toExternalForm(),"topp:states","epsg4326", WMTSServiceType.REST, null);
         WMTSTileIdentifier tileIdentifier = new WMTSTileIdentifier(10, 12,
                 new WebMercatorZoomLevel(5), kvpService.getName());
 

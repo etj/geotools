@@ -101,7 +101,7 @@ public class TileViewer {
         TileService service = new WMTSService("states", baseURL, "states", "webmercator",WMTSServiceType.KVP);*/
         
         String baseURL = "http://raspberrypi:8080/geoserver/gwc/service/wmts?REQUEST=GetCapabilities";
-        TileService service = new WMTSService("states", baseURL, "topp:states", "EPSG:900913",WMTSServiceType.KVP);
+        TileService service = new WMTSService("states", baseURL, "topp:states", "EPSG:900913",WMTSServiceType.KVP, null);
         map.addLayer(new AsyncTileLayer(service));
         // createTestCoverageLayer(map);
 

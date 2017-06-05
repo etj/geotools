@@ -19,87 +19,115 @@ package org.geotools.map;
 import static org.junit.Assert.*;
 
 import java.awt.Color;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
-import java.net.MalformedURLException;
+import java.io.InputStream;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.Set;
+import javax.xml.parsers.ParserConfigurationException;
+import net.opengis.wmts.v_1.CapabilitiesType;
+import org.apache.commons.io.IOUtils;
+import org.geotools.data.wmts.WMTSCapabilities;
 
 import org.geotools.data.wmts.WMTSLayer;
 import org.geotools.data.wmts.WebMapTileServer;
 import org.geotools.data.wmts.request.GetTileRequest;
-import org.geotools.factory.Hints;
 import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.geotools.ows.ServiceException;
 import org.geotools.referencing.CRS;
-import org.geotools.referencing.crs.DefaultGeographicCRS;
 import org.geotools.tile.Tile;
-import org.geotools.tile.TileService;
-import org.geotools.tile.impl.wmts.WMTSService;
-import org.geotools.tile.impl.wmts.WMTSServiceType;
-import org.hsqldb.Server;
-import org.junit.Before;
+import org.geotools.wmts.WMTSConfiguration;
+import org.geotools.xml.Parser;
 import org.junit.Test;
-import org.opengis.geometry.MismatchedDimensionException;
-import org.opengis.referencing.FactoryException;
-import org.opengis.referencing.NoSuchAuthorityCodeException;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
 
 /**
  * @author ian
  *
  */
 public class WMTSCoverageReaderTest {
-    static WMTSCoverageReader[] wcr = new WMTSCoverageReader[2];
-    
-    @Before
-    public void setup() throws ServiceException, MalformedURLException, IOException {
-        int i=0;
-        for(WMTSServiceType t:WMTSServiceType.values()) {
-            
-            
-            WebMapTileServer server = createServer(t);
-            WMTSLayer layer2 = (WMTSLayer) server.getCapabilities().getLayer("topp:states");
-            wcr[i++] = new WMTSCoverageReader(server  , layer2);
-        }
-        
-    }
-    /**
-     * Test method for {@link org.geotools.map.WMTSCoverageReader#initMapRequest(org.geotools.geometry.jts.ReferencedEnvelope, int, int, java.awt.Color)}.
-     * @throws IOException 
-     * @throws ServiceException 
-     * @throws FactoryException 
-     * @throws NoSuchAuthorityCodeException 
-     * @throws MismatchedDimensionException 
-     */
-    @Test
-    public void testInitMapRequest() throws IOException, ServiceException, MismatchedDimensionException, NoSuchAuthorityCodeException, FactoryException {
-        for(int i=0;i<2;i++) {
-            ReferencedEnvelope bbox = new ReferencedEnvelope(-180, 180, -90, 90, CRS.decode("EPSG:4326"));
-            int width=400;
-            int height=200;
-            Color backgroundColor = Color.WHITE;
-            ReferencedEnvelope grid = wcr[i].initMapRequest(bbox, width, height, backgroundColor );
-            assertNotNull(grid);
-            GetTileRequest mapRequest = wcr[i].getMapRequest();
-            mapRequest.setCRS(grid.getCoordinateReferenceSystem());
-            Set<Tile> responses = wcr[i].wmts.issueRequest(mapRequest);
-            for(Tile t:responses) {
-                //System.out.println(t);
-                //System.out.println(t.getTileIdentifier()+" "+t.getExtent());
-            }
-            
-        }
-    }
-    private WebMapTileServer createServer(WMTSServiceType type) throws ServiceException, MalformedURLException, IOException {
 
-        String baseURL;
-        // TODO: replace with local files
-        if (WMTSServiceType.REST.equals(type)) {
-            baseURL = "http://raspberrypi:9000/wmts/1.0.0/WMTSCapabilities.xml";
-            
-        } else {
-            baseURL = "http://raspberrypi:8080/geoserver/gwc/service/wmts?REQUEST=GetCapabilities";
-            
+    private final static String KVP_CAPA_RESOURCENAME = "getcapa_kvp.xml";
+    private final static String REST_CAPA_RESOURCENAME = "WMTSCapabilities.admin_ch.xml";
+
+    @Test
+    public void testRESTInitMapRequest() throws Exception {
+        WebMapTileServer server = createServer(REST_CAPA_RESOURCENAME);
+        WMTSLayer layer = (WMTSLayer) server.getCapabilities().getLayer("ch.are.agglomerationen_isolierte_staedte");
+        WMTSCoverageReader wcr = new WMTSCoverageReader(server, layer);
+        ReferencedEnvelope bbox = new ReferencedEnvelope(5, 12, 45, 49, CRS.decode("EPSG:4326"));
+        testInitMapRequest(wcr, bbox);
+    }
+
+    @Test
+    public void testKVPInitMapRequest() throws Exception {
+        WebMapTileServer server = createServer(KVP_CAPA_RESOURCENAME);
+        WMTSLayer layer = (WMTSLayer) server.getCapabilities().getLayer("topp:states");
+        WMTSCoverageReader wcr = new WMTSCoverageReader(server, layer);
+        ReferencedEnvelope bbox = new ReferencedEnvelope(-180, 180, -90, 90, CRS.decode("EPSG:4326"));
+        testInitMapRequest(wcr, bbox);
+    }
+
+    public void testInitMapRequest(WMTSCoverageReader wcr, ReferencedEnvelope bbox) throws Exception {
+        
+        int width=400;
+        int height=200;
+        Color backgroundColor = Color.WHITE;
+        ReferencedEnvelope grid = wcr.initMapRequest(bbox, width, height, backgroundColor );
+        assertNotNull(grid);
+        GetTileRequest mapRequest = wcr.getMapRequest();
+        mapRequest.setCRS(grid.getCoordinateReferenceSystem());
+        Set<Tile> responses = wcr.wmts.issueRequest(mapRequest);
+        for(Tile t:responses) {
+            System.out.println(t);
+            System.out.println(t.getTileIdentifier()+" "+t.getExtent());
         }
-        return new WebMapTileServer(new URL(baseURL));
+    }
+
+    private WebMapTileServer createServer(String resourceName) throws Exception {
+
+        File capaFile = getRESTgetcapaFile(resourceName);
+        WMTSCapabilities capa = createCapabilities(capaFile);
+        return new WebMapTileServer(capa);
+    }
+
+    private WMTSCapabilities createCapabilities(File capa) throws ServiceException {
+            Object object;
+            InputStream inputStream = null;
+            try {
+                inputStream = new FileInputStream(capa);
+                Parser parser = new Parser(new WMTSConfiguration());
+
+                object = parser.parse(new InputSource(inputStream));
+
+            } catch (SAXException |ParserConfigurationException | IOException e) {
+                throw (ServiceException) new ServiceException("Error while parsing XML.")
+                        .initCause(e);
+            } finally {
+                IOUtils.closeQuietly(inputStream);
+            }
+
+            if (object instanceof ServiceException) {
+                throw (ServiceException) object;
+            }
+
+            return new WMTSCapabilities( (CapabilitiesType)object);
+    }
+
+    private File getRESTgetcapaFile(String resourceName) {
+        try {
+            URL capaResource = getClass().getClassLoader().getResource(resourceName);
+            assertNotNull("Can't find getCapa resource " + resourceName, capaResource);
+            File capaFile = new File(capaResource.toURI());
+            assertTrue("Can't find getCapa file", capaFile.exists());
+
+            return capaFile;
+        } catch (URISyntaxException ex) {
+            fail(ex.getMessage());
+            return null;
+        }
     }
 }

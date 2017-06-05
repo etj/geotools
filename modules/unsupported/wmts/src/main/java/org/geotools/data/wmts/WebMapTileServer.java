@@ -90,7 +90,7 @@ public class WebMapTileServer extends AbstractOpenWebService<WMTSCapabilities, L
      * @throws ServiceException 
      */
     public WebMapTileServer(WMTSCapabilities capabilities) throws ServiceException, IOException {
-        this(capabilities.getRequest().getGetCapabilities().getGet());
+        super(capabilities, capabilities.getRequest().getGetCapabilities().getGet());
         setType(capabilities.getType());
     }
 
