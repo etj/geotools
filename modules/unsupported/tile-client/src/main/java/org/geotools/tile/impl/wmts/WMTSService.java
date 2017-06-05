@@ -18,13 +18,11 @@ package org.geotools.tile.impl.wmts;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.net.URL;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
-import java.util.logging.Logger;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -60,6 +58,9 @@ import org.xml.sax.SAXException;
 
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Envelope;
+import java.io.File;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * A tile service for WMTS servers. This is tied to a single layer and style.
@@ -94,6 +95,8 @@ public class WMTSService extends TileService {
 
     private List<TileMatrixLimits> limits;
 
+    private File cachedGetCapabilities = null;
+
     /**
      * This is only used for test purposes!
      * 
@@ -104,14 +107,14 @@ public class WMTSService extends TileService {
      */
     @Deprecated
     public WMTSService(String name, String baseURL, String layerName, String tileMatrixSetName,
-            WMTSServiceType type) {
+            WMTSServiceType type, File getcapa) {
         super(name, baseURL);
         setLayerName(layerName);
         setType(type);
         setTemplateURL(baseURL);
-        setTileMatrixSetName(tileMatrixSetName);
-        
+        this.cachedGetCapabilities = getcapa;
 
+        setTileMatrixSetName(tileMatrixSetName); // also load matrixSet
     }
 
     /**
@@ -444,11 +447,26 @@ public class WMTSService extends TileService {
         this.limits = limits;
     }
 
-    /**
-     * This is replaced by gt-xsd-wmts
-     */
-    @Deprecated
-    private void extractKVPTileMatrixSet() {
+    private org.w3c.dom.Document parseCachedCapabilities() throws IOException {
+
+        try{
+            DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+            dbf.setNamespaceAware(true);
+            DocumentBuilder db = dbf.newDocumentBuilder();
+
+            org.w3c.dom.Document doc = db.parse(cachedGetCapabilities);
+            return doc;
+        } catch (ParserConfigurationException | SAXException e) {
+            throw new IOException("Error handling getCapabilities document", e);
+        }
+    }
+
+    private org.w3c.dom.Document getKVPCapabilitiesDoc() throws IOException {
+
+        if(cachedGetCapabilities != null) {
+            return parseCachedCapabilities();
+        }
+
         HttpClient client = new HttpClient();
         HttpMethod method = new GetMethod(getBaseUrl());
         method.setQueryString("REQUEST=GetCapabilities");
@@ -456,12 +474,11 @@ public class WMTSService extends TileService {
                 new DefaultHttpMethodRetryHandler(3, false));
         try {
             // Execute the method.
-            
+
             int statusCode = client.executeMethod(method);
 
             if (statusCode != HttpStatus.SC_OK) {
                 LOGGER.severe("Method failed: " + method.getStatusLine());
-
             }
 
             // Read the response body.
@@ -476,6 +493,24 @@ public class WMTSService extends TileService {
             DocumentBuilder db = dbf.newDocumentBuilder();
 
             org.w3c.dom.Document doc = db.parse(new ByteArrayInputStream(responseBody));
+            return doc;
+        } catch (HttpException e) {
+            throw new IOException("Error handling getCapabilities document", e);
+        } catch (IOException | ParserConfigurationException | SAXException e) {
+            throw new IOException("Error handling getCapabilities document", e);
+        } finally {
+            // Release the connection.
+            method.releaseConnection();
+        }
+    }
+
+    /**
+     * This is replaced by gt-xsd-wmts
+     */
+    @Deprecated
+    private void extractKVPTileMatrixSet() {
+        try{
+            org.w3c.dom.Document doc = getKVPCapabilitiesDoc();
 
             NodeList ops = doc.getElementsByTagNameNS(OWS, "Operation");
             for (int i = 0; i < ops.getLength(); i++) {
@@ -524,23 +559,9 @@ public class WMTSService extends TileService {
                 }
             }
             // TODO: Tidy these exceptions up and throw something
-        } catch (HttpException e) {
-            System.err.println("Fatal protocol violation: " + e.getMessage());
-            e.printStackTrace();
         } catch (IOException e) {
-            System.err.println("Fatal transport error: " + e.getMessage());
-            e.printStackTrace();
-        } catch (ParserConfigurationException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-        } catch (SAXException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-        } finally {
-            // Release the connection.
-            method.releaseConnection();
+            LOGGER.log(Level.WARNING, "Error parsing Capabilities document", e);
         }
-
     }
 
     /**
@@ -549,26 +570,29 @@ public class WMTSService extends TileService {
     @Deprecated
     private void getWGS84Bounds(Element layer) {
         Node wgsbbox = layer.getElementsByTagNameNS(OWS, "WGS84BoundingBox").item(0);
-        NodeList bbox = wgsbbox.getChildNodes();
-        for (int j = 0; j < bbox.getLength(); j++) {
-            if (!(bbox.item(j) instanceof Element))
-                continue;
-            Element e = (Element) bbox.item(j);
+        if(wgsbbox != null) {
+            NodeList bbox = wgsbbox.getChildNodes();
+            for (int j = 0; j < bbox.getLength(); j++) {
+                if (!(bbox.item(j) instanceof Element))
+                    continue;
+                Element e = (Element) bbox.item(j);
 
-            if (e.getLocalName().equals("LowerCorner") || e.getLocalName().equals("UpperCorner")) {
-                String coords[] = e.getTextContent().split(" ");
+                if (e.getLocalName().equals("LowerCorner") || e.getLocalName().equals("UpperCorner")) {
+                    String coords[] = e.getTextContent().split(" ");
 
-                envelope.expandToInclude(Double.parseDouble(coords[0]),
-                        Double.parseDouble(coords[1]));
+                    envelope.expandToInclude(Double.parseDouble(coords[0]),
+                            Double.parseDouble(coords[1]));
+                }
             }
         }
     }
 
-    /**
-     * Extract the scales, bbox etc from capabilities.
-     */
-    @Deprecated
-    private void extractRestTileMatrixSet() {
+
+    private org.w3c.dom.Document getRESTCapabilitiesDoc() throws IOException {
+
+        if(cachedGetCapabilities != null) {
+            return parseCachedCapabilities();
+        }
 
         HttpClient client = new HttpClient();
         HttpMethod method = new GetMethod(getBaseUrl());
@@ -595,9 +619,28 @@ public class WMTSService extends TileService {
             DocumentBuilder db = dbf.newDocumentBuilder();
 
             org.w3c.dom.Document doc = db.parse(new ByteArrayInputStream(responseBody));
+            return doc;
+        } catch (HttpException e) {
+            throw new IOException("Error handling REST getCapabilities document", e);
+        } catch (IOException | ParserConfigurationException | SAXException e) {
+            throw new IOException("Error handling REST getCapabilities document", e);
+        } finally {
+            // Release the connection.
+            method.releaseConnection();
+        }
+    }
 
+    /**
+     * Extract the scales, bbox etc from capabilities.
+     */
+    @Deprecated
+    private void extractRestTileMatrixSet() {
+
+        try {
             // read layer info
+            org.w3c.dom.Document doc = getRESTCapabilitiesDoc();
 
+            boolean layerFound = false;
             NodeList layers = doc.getElementsByTagName("Layer");
             for (int i = 0; i < layers.getLength(); i++) {
                 Element element = (Element) layers.item(i);
@@ -609,7 +652,11 @@ public class WMTSService extends TileService {
                     getWGS84Bounds(layer);
                     Element resource = (Element) layer.getElementsByTagName("ResourceURL").item(0);
                     templateURL = resource.getAttribute("template");
+                    layerFound = true;
                 }
+            }
+            if(! layerFound) {
+                LOGGER.warning("Layer not found : " + layerName);
             }
 
             NodeList tms = doc.getElementsByTagName("TileMatrixSet");
@@ -630,22 +677,13 @@ public class WMTSService extends TileService {
                     }
                 }
             }
+            if (matrixSet == null) {
+                LOGGER.warning("TileMatrixSet not found: " + tileMatrixSetName);
+            }
+
             // TODO: Tidy these exceptions up and throw something
-        } catch (HttpException e) {
-            System.err.println("Fatal protocol violation: " + e.getMessage());
-            e.printStackTrace();
         } catch (IOException e) {
-            System.err.println("Fatal transport error: " + e.getMessage());
-            e.printStackTrace();
-        } catch (ParserConfigurationException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-        } catch (SAXException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-        } finally {
-            // Release the connection.
-            method.releaseConnection();
+            LOGGER.log(Level.WARNING, "Error parsing REST Capabilities document", e);
         }
     }
 
