@@ -21,6 +21,7 @@ import org.geotools.data.ows.Service;
 
 import net.opengis.ows11.LanguageStringType;
 import net.opengis.ows11.ServiceIdentificationType;
+import net.opengis.ows11.impl.KeywordsTypeImpl;
 
 /**
  * @author ian
@@ -36,7 +37,7 @@ public class WMTSService extends Service {
         EList kws = serviceType.getKeywords();
         String[] keywords = new String[kws.size()];
         for(int i=0;i<kws.size();i++) {
-            keywords[i] = ((LanguageStringType)kws.get(i)).getValue();
+            keywords[i] = ((KeywordsTypeImpl)kws.get(i)).getKeyword().toString();
         }
         setKeywordList(keywords);
     }
