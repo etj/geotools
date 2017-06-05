@@ -29,20 +29,22 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 import org.bson.types.ObjectId;
-import org.geotools.util.logging.LoggerFactory;
+import org.geotools.data.mongodb.complex.JsonSelectAllFunction;
+import org.geotools.data.mongodb.complex.JsonSelectFunction;
+import org.geotools.util.Converters;
 import org.geotools.util.logging.Logging;
 
 import static org.geotools.util.Converters.convert;
 
 import org.opengis.feature.simple.SimpleFeatureType;
 import org.opengis.feature.type.AttributeDescriptor;
+import org.opengis.feature.type.PropertyDescriptor;
 import org.opengis.filter.And;
 import org.opengis.filter.BinaryComparisonOperator;
 import org.opengis.filter.ExcludeFilter;
@@ -112,7 +114,8 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
 
     private static final Logger LOGGER = Logging.getLogger(FilterToMongo.class);
 
-    static final SimpleDateFormat ISO8601_SDF = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
+    static final SimpleDateFormat ISO8601_SDF = new SimpleDateFormat(
+            "yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
 
     final CollectionMapper mapper;
 
@@ -140,8 +143,7 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
     /**
      * Sets the feature type the encoder is encoding a filter for.
      * <p>
-     * The type of the attributes may drive how the filter is translated to a mongodb
-     * query document.
+     * The type of the attributes may drive how the filter is translated to a mongodb query document.
      * </p>
      * 
      * @param featureType
@@ -189,17 +191,17 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
     // logical
     //
 
-    // Expressions like ((A == 1) AND (B == 2)) are basically
-    // implied. So just build up all sub expressions
     @Override
     public Object visit(And filter, Object extraData) {
         BasicDBObject output = asDBObject(extraData);
-
         List<Filter> children = filter.getChildren();
+        BasicDBList andList = new BasicDBList();
         if (children != null) {
             for (Filter child : children) {
-                child.accept(this, output);
+                BasicDBObject item = (BasicDBObject) child.accept(this, null);
+                andList.add(item);
             }
+            output.put("$and", andList);
         }
 
         return output;
@@ -273,19 +275,35 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
         return output;
     }
 
+    private Class getJsonSelectType(Expression expression) {
+        if (expression instanceof JsonSelectFunction) {
+            PropertyDescriptor descriptor = featureType.getDescriptor(((JsonSelectFunction) expression).getJsonPath());
+            return descriptor == null ? null : descriptor.getType().getBinding();
+        }
+        if (expression instanceof JsonSelectAllFunction) {
+            PropertyDescriptor descriptor = featureType.getDescriptor(((JsonSelectAllFunction) expression).getJsonPath());
+            return descriptor == null ? null : descriptor.getType().getBinding();
+        }
+        return null;
+    }
+
     private Class<?> getValueType(Expression e) {
         Class<?> valueType = null;
 
+        valueType = getJsonSelectType(e);
+        if (valueType != null) {
+            return valueType;
+        }
+
         if (e instanceof PropertyName && featureType != null) {
             // we should get the value type from the correspondent attribute descriptor
-            AttributeDescriptor attType = (AttributeDescriptor)e.evaluate(featureType);
+            AttributeDescriptor attType = (AttributeDescriptor) e.evaluate(featureType);
             if (attType != null) {
                 valueType = attType.getType().getBinding();
             }
-        }
-        else if (e instanceof Function) {
+        } else if (e instanceof Function) {
             // get the value type from the function return type
-            Class<?> ret = getFunctionReturnType((Function)e);
+            Class<?> ret = getFunctionReturnType((Function) e);
             if (ret != null) {
                 valueType = ret;
             }
@@ -404,8 +422,10 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
 
         Envelope envelope = filter.getExpression2().evaluate(null, Envelope.class);
 
+        DBObject geometryDBObject = geometryBuilder.toObject(envelope);
+        addCrsToGeometryDBObject(geometryDBObject);
         DBObject dbo = BasicDBObjectBuilder.start().push("$geoIntersects")
-                .add("$geometry", geometryBuilder.toObject(envelope)).get();
+                .add("$geometry", geometryDBObject).get();
 
         output.put((String) e1, dbo);
         return output;
@@ -421,8 +441,10 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
 
         Geometry geometry = filter.getExpression2().evaluate(null, Geometry.class);
 
+        DBObject geometryDBObject = geometryBuilder.toObject(geometry);
+        addCrsToGeometryDBObject(geometryDBObject);
         DBObject dbo = BasicDBObjectBuilder.start().push("$geoIntersects")
-                .add("$geometry", geometryBuilder.toObject(geometry)).get();
+                .add("$geometry", geometryDBObject).get();
 
         output.put((String) e1, dbo);
         return output;
@@ -437,8 +459,10 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
 
         Geometry geometry = filter.getExpression2().evaluate(null, Geometry.class);
 
+        DBObject geometryDBObject = geometryBuilder.toObject(geometry);
+        addCrsToGeometryDBObject(geometryDBObject);
         DBObject dbo = BasicDBObjectBuilder.start().push("$geoWithin")
-                .add("$geometry", geometryBuilder.toObject(geometry)).get();
+                .add("$geometry", geometryDBObject).get();
 
         output.put((String) e1, dbo);
         return output;
@@ -510,6 +534,12 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
 
     @Override
     public Object visit(Function function, Object extraData) {
+        if (function instanceof JsonSelectFunction) {
+            return ((JsonSelectFunction) function).getJsonPath();
+        }
+        if (function instanceof JsonSelectAllFunction) {
+            return ((JsonSelectAllFunction) function).getJsonPath();
+        }
         throw new UnsupportedOperationException();
     }
 
@@ -609,7 +639,7 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
                 return literal;
             }
             // by default, convert date to ISO-8601 string
-            return ISO8601_SDF.format((Date)literal);
+            return ISO8601_SDF.format((Date) literal);
         } else if (literal instanceof String) {
             if (targetType != null && Date.class.isAssignableFrom(targetType)) {
                 // try parse string assuming it's ISO-8601 formatted
@@ -619,10 +649,33 @@ public class FilterToMongo implements FilterVisitor, ExpressionVisitor {
                     LOGGER.log(Level.WARNING, "Could not parse String literal as ISO-8601 date", e);
                 }
             }
-            // by default, return string as is
-            return literal;
+            // try to convert to the expected type
+            return convertLiteral(literal, targetType);
         } else {
+            // try to convert to the expected type
+            return convertLiteral(literal, targetType);
+        }
+    }
+
+    /**
+     * Helper method that tries to convert a literal to the expected type.
+     */
+    private Object convertLiteral(Object literal, Class<?> targetType) {
+        if (literal == null || targetType == null) {
+            // return the literal as is
+            return literal;
+        }
+        Object converted = Converters.convert(literal, targetType);
+        if (converted == null) {
+            // no conversion found return the literal as string
             return literal.toString();
         }
+        // return the converted value
+        return converted;
+    }
+
+    void addCrsToGeometryDBObject(DBObject geometryDBObject) {
+        geometryDBObject.put("crs", BasicDBObjectBuilder.start().add("type", "name")
+                .push("properties").add("name", "urn:x-mongodb:crs:strictwinding:EPSG:4326").get());
     }
 }

@@ -109,8 +109,12 @@ import org.opengis.feature.simple.SimpleFeatureType;
 import org.opengis.feature.type.GeometryDescriptor;
 import org.opengis.feature.type.Name;
 import org.opengis.filter.Filter;
+import org.opengis.referencing.FactoryException;
+import org.opengis.referencing.NoSuchAuthorityCodeException;
 import org.opengis.referencing.ReferenceIdentifier;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
+import org.opengis.referencing.operation.MathTransform;
+import org.opengis.referencing.operation.TransformException;
 
 import com.vividsolutions.jts.geom.Polygon;
 
@@ -308,6 +312,7 @@ public class ImageMosaicConfigHandler {
         //
         // do we have a datastore.properties file?
         final File parent = new File(runConfiguration.getParameter(Prop.ROOT_MOSAIC_DIR));
+        
         GranuleCatalog catalog;
 
         // Consider checking that from the indexer if any
@@ -379,11 +384,17 @@ public class ImageMosaicConfigHandler {
         GranuleCatalog catalog = null;
         // SPI
         final String SPIClass = properties.getProperty("SPI");
+        DataStoreFactorySpi spi = null; 
         try {
-            // create a datastore as instructed
-            final DataStoreFactorySpi spi = (DataStoreFactorySpi) Class.forName(SPIClass)
-                    .newInstance();
-
+            if (SPIClass == null) {
+                if (properties.get(Utils.Prop.STORE_NAME) == null) {
+                    throw new IllegalArgumentException(
+                            "Required property SPI is missing from configuration");
+                }
+            } else {
+                // create a datastore as instructed
+                spi = (DataStoreFactorySpi) Class.forName(SPIClass).newInstance();
+            }
             // set ParentLocation parameter since for embedded database like H2 we must change the database
             // to incorporate the path where to write the db
             properties.put("ParentLocation", DataUtilities.fileToURL(parent).toExternalForm());
@@ -466,7 +477,8 @@ public class ImageMosaicConfigHandler {
         if (indexSchema == null) {
             // Proceed with default Schema
             final SimpleFeatureTypeBuilder featureBuilder = new SimpleFeatureTypeBuilder();
-            featureBuilder.setName(name);
+            String typeName = runConfiguration.getParameter(Prop.TYPENAME);
+            featureBuilder.setName(typeName != null ? typeName : name);
             featureBuilder.setNamespaceURI("http://www.geo-solutions.it/");
             featureBuilder.add(runConfiguration.getParameter(Prop.LOCATION_ATTRIBUTE).trim(),
                     String.class);
@@ -987,6 +999,7 @@ public class ImageMosaicConfigHandler {
 
         // parse the string
         final List<PropertiesCollector> pcs = new ArrayList<>();
+        boolean hasCRSCollector = false;
         for (Collector collector : collectorList) {
             PropertiesCollectorSPI selectedSPI = null;
             final String spiName = collector.getSpi();
@@ -1020,12 +1033,17 @@ public class ImageMosaicConfigHandler {
             final PropertiesCollector pc = selectedSPI.create(config,
                     Arrays.asList(collector.getMapped()));
             if (pc != null) {
+                hasCRSCollector |= pc instanceof CRSExtractor;
                 pcs.add(pc);
             } else {
                 if (LOGGER.isLoggable(Level.INFO)) {
                     LOGGER.info("Unable to create PropertyCollector");
                 }
             }
+        }
+        
+        if(heterogeneousCRS && !hasCRSCollector) {
+            pcs.add(new CRSExtractor());
         }
 
         this.propertiesCollectors = pcs;
@@ -1159,6 +1177,13 @@ public class ImageMosaicConfigHandler {
             properties.setProperty(Utils.Prop.ELEVATION_ATTRIBUTE,
                     mosaicConfiguration.getElevationAttribute());
         }
+        
+        // CRS
+        final String crsAttribute = mosaicConfiguration.getCRSAttribute();
+        if (crsAttribute != null) {
+            properties.setProperty(Utils.Prop.CRS_ATTRIBUTE,
+                    mosaicConfiguration.getCRSAttribute());
+        }
 
         // Additional domains
         final String additionalDomainAttribute = mosaicConfiguration
@@ -1273,10 +1298,13 @@ public class ImageMosaicConfigHandler {
      * @param numFiles
      * @param transaction
      * @throws IOException
+     * @throws FactoryException 
+     * @throws NoSuchAuthorityCodeException 
+     * @throws TransformException 
      */
     public void updateConfiguration(GridCoverage2DReader coverageReader,
             final String inputCoverageName, File fileBeingProcessed, int fileIndex, double numFiles,
-            DefaultTransaction transaction) throws IOException, GranuleHandlingException {
+            DefaultTransaction transaction) throws IOException, GranuleHandlingException, NoSuchAuthorityCodeException, FactoryException, TransformException {
 
         final String targetCoverageName = getTargetCoverageName(coverageReader, inputCoverageName);
 
@@ -1309,6 +1337,7 @@ public class ImageMosaicConfigHandler {
         int numberOfLevels = 1;
         double[][] resolutionLevels = null;
         CatalogBuilderConfiguration catalogConfig;
+        Boolean heterogeneousCRS = Boolean.valueOf(IndexerUtils.getParameter(Prop.HETEROGENEOUS_CRS, indexer));
         if (mosaicConfiguration == null) {
             catalogConfig = getRunConfiguration();
             // We don't have a configuration for this configuration
@@ -1320,8 +1349,6 @@ public class ImageMosaicConfigHandler {
             ImageLayout layout = coverageReader.getImageLayout(inputCoverageName);
             cm = layout.getColorModel(null);
             sm = layout.getSampleModel(null);
-            numberOfLevels = coverageReader.getNumOverviews(inputCoverageName) + 1;
-            resolutionLevels = coverageReader.getResolutionLevels(inputCoverageName);
 
             // at the first step we initialize everything that we will
             // reuse afterwards starting with color models, sample
@@ -1337,15 +1364,26 @@ public class ImageMosaicConfigHandler {
                 byte[][] defaultPalette = Utils.extractPalette(icm);
                 configBuilder.setPalette(defaultPalette);
             }
-
+            
             // STEP 2.A
             // Preparing configuration
-            configBuilder.setCrs(actualCRS);
+            String mosaicCrs = IndexerUtils.getParameter(Utils.Prop.MOSAIC_CRS, indexer);
+            if (mosaicCrs != null) {
+                configBuilder.setCrs(CRS.decode(mosaicCrs, true));
+            } else {
+                configBuilder.setCrs(actualCRS);
+            }
+
+            // get/compute the resolution levels
+            resolutionLevels = getResolutionLevels(coverageReader, inputCoverageName, configBuilder.getCrs());
+            numberOfLevels = resolutionLevels.length;
             configBuilder.setLevels(resolutionLevels);
             configBuilder.setLevelsNum(numberOfLevels);
             configBuilder.setName(targetCoverageName);
             configBuilder.setTimeAttribute(
                     IndexerUtils.getAttribute(targetCoverageName, Utils.TIME_DOMAIN, indexer));
+            configBuilder.setCrsAttribute(
+                    IndexerUtils.getAttribute(targetCoverageName, Prop.CRS_ATTRIBUTE, indexer));
             configBuilder.setElevationAttribute(
                     IndexerUtils.getAttribute(targetCoverageName, Utils.ELEVATION_DOMAIN, indexer));
             configBuilder.setAdditionalDomainAttributes(IndexerUtils
@@ -1391,6 +1429,9 @@ public class ImageMosaicConfigHandler {
                     IndexerUtils.getParameterAsBoolean(Prop.CHECK_AUXILIARY_METADATA, indexer));
 
             currentConfigurationBean = configBuilder.getMosaicConfigurationBean();
+            if(heterogeneousCRS) {
+                currentConfigurationBean.getCatalogConfigurationBean().setHeterogeneous(true);
+            }
 
             // Creating a rasterManager which will be initialized after populating the catalog
             getParentReader().addRasterManager(currentConfigurationBean, false);
@@ -1399,7 +1440,7 @@ public class ImageMosaicConfigHandler {
             if (!useExistingSchema) {
                 // creating the schema
                 SimpleFeatureType indexSchema = createSchema(getRunConfiguration(),
-                        currentConfigurationBean.getName(), actualCRS);
+                        currentConfigurationBean.getName(), configBuilder.getCrs());
                 getParentReader().createCoverage(targetCoverageName, indexSchema);
             }
             getConfigurations().put(currentConfigurationBean.getName(), currentConfigurationBean);
@@ -1418,8 +1459,8 @@ public class ImageMosaicConfigHandler {
             CatalogConfigurationBean catalogConfigurationBean = bean;
 
             // make sure we pick the same resolution irrespective of order of harvest
-            numberOfLevels = coverageReader.getNumOverviews(inputCoverageName) + 1;
-            resolutionLevels = coverageReader.getResolutionLevels(inputCoverageName);
+            resolutionLevels = getResolutionLevels(coverageReader, inputCoverageName, mosaicConfiguration.getCrs());
+            numberOfLevels = resolutionLevels.length;
 
             int originalNumberOfLevels = mosaicConfiguration.getLevelsNum();
             boolean needUpdate = false;
@@ -1451,6 +1492,73 @@ public class ImageMosaicConfigHandler {
             updateCatalog(targetCoverageName, fileBeingProcessed, coverageReader, getParentReader(),
                     catalogConfig, envelope, transaction, getPropertiesCollectors());
         }
+    }
+
+    private double[][] getResolutionLevels(GridCoverage2DReader coverageReader,
+            final String inputCoverageName, CoordinateReferenceSystem mosaicCRS)
+            throws IOException, FactoryException, TransformException {
+        double[][] resolutionLevels;
+        resolutionLevels = coverageReader.getResolutionLevels(inputCoverageName);
+        final CoordinateReferenceSystem readerCRS = coverageReader.getCoordinateReferenceSystem();
+        if (mosaicCRS != null && readerCRS != null
+                && !CRS.equalsIgnoreMetadata(mosaicCRS, readerCRS)) {
+            resolutionLevels = transformResolutionLevels(resolutionLevels, readerCRS, mosaicCRS,
+                    coverageReader.getOriginalEnvelope());
+        }
+        return resolutionLevels;
+    }
+
+    /**
+     * Transforms the given resolution levels from a start CRS to a target one.  
+     * 
+     * @param resolutionLevels
+     * @param fromCRS
+     * @param toCRS
+     * @param envelope
+     * @return
+     * @throws FactoryException 
+     * @throws TransformException 
+     */
+    private double[][] transformResolutionLevels(double[][] resolutionLevels,
+            CoordinateReferenceSystem fromCRS, CoordinateReferenceSystem toCRS,
+            GeneralEnvelope sourceEnvelope) throws FactoryException, TransformException {
+        
+        // prepare a set of points at middle of the envelope and their 
+        // corresponding offsets based on resolutions
+        final int numLevels = resolutionLevels.length;
+        double[] points = new double[numLevels * 8];
+        double baseX = sourceEnvelope.getMedian(0);
+        double baseY = sourceEnvelope.getMedian(1);
+        for (int i = 0, j = 0; i < numLevels; i++) {
+            // delta x point
+            points[j++] = baseX;
+            points[j++] = baseY;
+            points[j++] = baseX + resolutionLevels[i][0];
+            points[j++] = baseY;
+            // delta y point
+            points[j++] = baseX;
+            points[j++] = baseY;
+            points[j++] = baseX;
+            points[j++] = baseY + resolutionLevels[i][1];
+        }
+        
+        // transform to get offsets in the target CRS
+        MathTransform mt = CRS.findMathTransform(fromCRS, toCRS);
+        mt.transform(points, 0, points, 0, numLevels * 4);
+        
+        // compute back the offsets
+        double[][] result = new double[numLevels][2];
+        for (int i = 0; i < numLevels; i++) {
+            result[i][0] = distance(points, i * 8);
+            result[i][1] = distance(points, i * 8 + 4);
+        }
+        return result;
+    }
+
+    private double distance(double[] points, int base) {
+        double dx = points[base + 2] - points[base];
+        double dy = points[base + 3] - points[base + 1];
+        return Math.sqrt(dx * dx + dy * dy);
     }
 
     /**

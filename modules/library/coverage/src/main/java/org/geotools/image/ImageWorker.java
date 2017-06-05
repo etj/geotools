@@ -98,6 +98,7 @@ import javax.media.jai.operator.XorConstDescriptor;
 import javax.media.jai.registry.RenderedRegistryMode;
 
 import org.geotools.factory.Hints;
+import org.geotools.geometry.jts.JTS;
 import org.geotools.image.io.ImageIOExt;
 import org.geotools.referencing.ReferencingFactoryFinder;
 import org.geotools.referencing.operation.transform.WarpBuilder;
@@ -686,6 +687,24 @@ public class ImageWorker {
         PlanarImage pl = getPlanarImage();
         if (roi == null) {
             pl.removeProperty("ROI");
+            // get it back, in some ops like mosaic setting it to null has no effect,
+            // will just make it pick from the first source...
+            // Computing the ROI from sources might fail, so a fallback is needed for that case too
+            boolean overwriteROI = false;
+            try {
+                Object property = pl.getProperty("ROI");
+                overwriteROI = property != null && property != Image.UndefinedProperty;
+            } catch(Exception e) {
+                // evidently getting the ROI by computation will cause issues, overwrite with a solid one
+                overwriteROI = true;
+                if(LOGGER.isLoggable(Level.FINE)) {
+                    LOGGER.log(Level.FINE, "Failure while checking source image ROI during a ROI reset, normally it's safely ignorable", e);
+                }
+            }
+            if(overwriteROI) {
+                // a ROIGeometry from a rectangle is a good substitute in this case
+                pl.setProperty("ROI", new ROIGeometry(JTS.toPolygon(new Rectangle(image.getMinX(), image.getMinY(), image.getWidth(), image.getHeight()))));
+            }
         } else {
             pl.setProperty("ROI", roi);
         }
@@ -1322,6 +1341,8 @@ public class ImageWorker {
         final int length = extrema[0].length;
         final double[] scale = new double[length];
         final double[] offset = new double[length];
+        final double destNodata = (background != null && background.length > 0) ? background[0] : ((nodata != null && !nodata.contains(0)) ? 0d: Double.NaN);
+
         boolean computeRescale = false;
         for (int i = 0; i < length; i++) {
             final double delta = extrema[1][i] - extrema[0][i];
@@ -1349,10 +1370,8 @@ public class ImageWorker {
             pb.set(offset, 1); // The per-band offsets to be added.
             pb.set(roi, 2); // ROI
             pb.set(nodata, 3); // NoData range
-            if (isNoDataNeeded()) {
-                if (background != null && background.length > 0) {
-                    pb.set(background[0], 5); // destination No Data value
-                }
+            if (isNoDataNeeded() && !Double.isNaN(destNodata)) {
+                pb.set(destNodata, 5);
             }
 
             image = JAI.create("Rescale", pb, hints);
@@ -4278,8 +4297,10 @@ public class ImageWorker {
         pb.set(roi, 4);
         pb.set(nodata, 5);
         if (isNoDataNeeded()) {
-            if (background != null && background.length > 0) {
-                pb.set(background, 6);
+            double destinationNoData = nodata != null? nodata.getMin().doubleValue() : (background!= null && background.length > 0)?
+                    background[0] : Double.NaN;
+            if (!Double.isNaN(destinationNoData)){
+                pb.set(new double[]{destinationNoData}, 6);
             }
         }
         

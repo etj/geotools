@@ -45,6 +45,7 @@ import org.geotools.coverage.grid.GridCoverageFactory;
 import org.geotools.coverage.grid.GridEnvelope2D;
 import org.geotools.coverage.grid.GridGeometry2D;
 import org.geotools.coverage.grid.io.DimensionDescriptor;
+import org.geotools.coverage.grid.io.GridCoverage2DReader;
 import org.geotools.coverage.io.CoverageReadRequest;
 import org.geotools.coverage.io.CoverageResponse;
 import org.geotools.coverage.io.SpatialRequestHelper.CoverageProperties;
@@ -54,6 +55,10 @@ import org.geotools.coverage.io.range.RangeType;
 import org.geotools.data.DataSourceException;
 import org.geotools.data.Query;
 import org.geotools.factory.Hints;
+import org.geotools.feature.visitor.FeatureCalc;
+import org.geotools.feature.visitor.MaxVisitor;
+import org.geotools.feature.visitor.MinVisitor;
+
 import it.geosolutions.imageio.imageioimpl.EnhancedImageReadParam;
 import org.geotools.geometry.GeneralEnvelope;
 import org.geotools.geometry.jts.ReferencedEnvelope;
@@ -243,6 +248,7 @@ class NetCDFResponse extends CoverageResponse{
             GridSampleDimension sampleDimension = sampleDimensions[0];
             noData = sampleDimension.getNoDataValues();
         }
+
         // handling date and time
         for (DateRange timeRange : tempSubset) {
             for (NumberRange<Double> elevation : vertSubset) {
@@ -255,13 +261,24 @@ class NetCDFResponse extends CoverageResponse{
                 // handle additional params
                 additionalParamsManagement(query, domainsSubset, dimensionDescriptors);
 
+                //set query typename
+                query.setTypeName(request.name);
+
+                //handle default params
+                if (timeRange == null && timeFilterAttribute != null) {
+                    defaultQuery(query, timeFilterAttribute);
+                }
+                if (elevation == null && elevationFilterAttribute != null) {
+                    defaultQuery(query, elevationFilterAttribute);
+                }
+                defaultParamsManagement(query, domainsSubset, dimensionDescriptors);
+
                 // bbox
                 query.setFilter(FeatureUtilities.DEFAULT_FILTER_FACTORY.and(query.getFilter(),
                         FeatureUtilities.DEFAULT_FILTER_FACTORY.bbox(
                                 FeatureUtilities.DEFAULT_FILTER_FACTORY.property("the_geom"),
                                 targetBBox)));
 
-                query.setTypeName(request.name);
                 List<Integer> indexes = request.source.reader.getImageIndex(query);
                 if (indexes == null || indexes.isEmpty()) {
                     if (LOGGER.isLoggable(Level.FINE)) {
@@ -294,7 +311,8 @@ class NetCDFResponse extends CoverageResponse{
      * @param query
      * @param domainsSubset
      */
-    private void additionalParamsManagement(Query query, Map<String, Set<?>> domainsSubset,  List<DimensionDescriptor> dimensionDescriptors) {
+    private void additionalParamsManagement(Query query, Map<String, Set<?>> domainsSubset,  List<DimensionDescriptor> dimensionDescriptors) 
+        throws IOException {
         if (domainsSubset.isEmpty()){
             return;
         }
@@ -308,7 +326,7 @@ class NetCDFResponse extends CoverageResponse{
                      break;
                 }
             }
-            for(Object value:values){
+            for(Object value:values){               
                 if(value instanceof Range){
                     throw new UnsupportedOperationException();
                 } else {
@@ -372,6 +390,54 @@ class NetCDFResponse extends CoverageResponse{
 
         Filter filter = FeatureUtilities.DEFAULT_FILTER_FACTORY.and(filters);
         query.setFilter(filter);
+    }
+
+    private Object findDefaultValue(Query query, String attribute) {
+        FeatureCalc aggFunc;
+        switch (NetCDFUtilities.getParameterBehaviour(attribute)) {
+        case MAX:
+            aggFunc = new MaxVisitor(attribute);
+            break;
+        case MIN:
+            aggFunc = new MinVisitor(attribute);
+            break;
+        default:
+            return null;
+        }
+        try {
+            request.source.reader.getCatalog().computeAggregateFunction(query, aggFunc);
+            return aggFunc.getResult().getValue();
+        } catch (IOException e) {
+            LOGGER.log(Level.WARNING, e.getMessage(), e);
+            return null;
+        }
+    }
+
+    private void defaultQuery(Query query, String filterAttribute) {
+        Object value = findDefaultValue(query, filterAttribute);
+        if (value != null) {
+            Filter filter = query.getFilter();
+            filter = FeatureUtilities.DEFAULT_FILTER_FACTORY.and(filter,
+                    FeatureUtilities.DEFAULT_FILTER_FACTORY.equals(
+                            FeatureUtilities.DEFAULT_FILTER_FACTORY.property(filterAttribute),
+                            FeatureUtilities.DEFAULT_FILTER_FACTORY.literal(value)));
+            query.setFilter(filter);
+        }
+    }
+
+    private void defaultParamsManagement(Query query, Map<String, Set<?>> domainsSubset,
+            List<DimensionDescriptor> dimensionDescriptors) {
+        for (DimensionDescriptor dim : dimensionDescriptors) {
+            boolean notPresent = true;
+            for (String key : domainsSubset.keySet()) {
+                if (dim.getName().toUpperCase().equalsIgnoreCase(key)) {
+                     notPresent = false;
+                }
+            }
+            if (notPresent) {
+                defaultQuery(query, dim.getStartAttribute());
+            }
+        }
     }
 
     private void prepareParams() throws DataSourceException {
@@ -478,18 +544,16 @@ class NetCDFResponse extends CoverageResponse{
      * @throws IOException
      */
     private GridCoverage2D prepareCoverage(RenderedImage image, GridSampleDimension[] sampleDimensions, double[] noData) throws IOException {
-
-        Map<String, Object> properties = null;
+        Map<String, Object> properties = new HashMap<String, Object>();
         if (noData != null && noData.length > 0) {
-            properties = new HashMap<String, Object>();
             CoverageUtilities.setNoDataProperty(properties, noData[0]);
         }
+        properties.put(GridCoverage2DReader.SOURCE_URL_PROPERTY, datasetURL);
         return COVERAGE_FACTORY.create(request.name, image, new GridGeometry2D(new GridEnvelope2D(PlanarImage.wrapRenderedImage(image)
                         .getBounds()), PixelInCell.CELL_CORNER, finalGridToWorldCorner,
                         this.targetBBox.getCoordinateReferenceSystem(), hints), sampleDimensions, null,
                 properties);
     }
-    
 
     /**
      * Load a specified a raster as a portion of the granule describe by this {@link DefaultGranuleDescriptor}.

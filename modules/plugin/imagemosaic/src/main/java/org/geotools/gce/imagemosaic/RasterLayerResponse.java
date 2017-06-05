@@ -16,12 +16,19 @@
  */
 package org.geotools.gce.imagemosaic;
 
-import java.awt.*;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Rectangle;
+import java.awt.RenderingHints;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Point2D;
-import java.awt.image.*;
+import java.awt.image.ColorModel;
+import java.awt.image.IndexColorModel;
+import java.awt.image.RenderedImage;
+import java.awt.image.SampleModel;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -43,7 +50,6 @@ import javax.media.jai.RenderedOp;
 import javax.media.jai.operator.ConstantDescriptor;
 import javax.media.jai.operator.MosaicDescriptor;
 
-import it.geosolutions.imageio.utilities.ImageIOUtilities;
 import org.geotools.coverage.Category;
 import org.geotools.coverage.GridSampleDimension;
 import org.geotools.coverage.TypeMap;
@@ -51,7 +57,6 @@ import org.geotools.coverage.grid.GridCoverage2D;
 import org.geotools.coverage.grid.GridCoverageFactory;
 import org.geotools.coverage.grid.GridEnvelope2D;
 import org.geotools.coverage.grid.GridGeometry2D;
-import org.geotools.coverage.grid.io.AbstractGridCoverage2DReader;
 import org.geotools.coverage.grid.io.GridCoverage2DReader;
 import org.geotools.coverage.grid.io.footprint.FootprintBehavior;
 import org.geotools.data.DataSourceException;
@@ -60,10 +65,12 @@ import org.geotools.factory.Hints;
 import org.geotools.filter.SortByImpl;
 import org.geotools.gce.imagemosaic.OverviewsController.OverviewLevel;
 import org.geotools.gce.imagemosaic.RasterManager.DomainDescriptor;
+import org.geotools.gce.imagemosaic.catalog.GranuleCatalog;
 import org.geotools.gce.imagemosaic.catalog.GranuleCatalogVisitor;
 import org.geotools.gce.imagemosaic.egr.ROIExcessGranuleRemover;
-import org.geotools.gce.imagemosaic.granulecollector.DefaultSubmosaicProducerFactory;
 import org.geotools.gce.imagemosaic.granulecollector.DefaultSubmosaicProducer;
+import org.geotools.gce.imagemosaic.granulecollector.DefaultSubmosaicProducerFactory;
+import org.geotools.gce.imagemosaic.granulecollector.ReprojectingSubmosaicProducerFactory;
 import org.geotools.gce.imagemosaic.granulecollector.SubmosaicProducer;
 import org.geotools.gce.imagemosaic.granulecollector.SubmosaicProducerFactory;
 import org.geotools.geometry.Envelope2D;
@@ -73,26 +80,30 @@ import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.geotools.image.ImageWorker;
 import org.geotools.referencing.CRS;
 import org.geotools.referencing.operation.transform.AffineTransform2D;
+import org.geotools.renderer.crs.ProjectionHandler;
+import org.geotools.renderer.crs.ProjectionHandlerFinder;
 import org.geotools.resources.coverage.CoverageUtilities;
 import org.geotools.resources.coverage.FeatureUtilities;
 import org.geotools.resources.geometry.XRectangle2D;
 import org.geotools.resources.i18n.Vocabulary;
 import org.geotools.resources.i18n.VocabularyKeys;
-import it.geosolutions.imageio.imageioimpl.EnhancedImageReadParam;
 import org.geotools.resources.image.ImageUtilities;
 import org.geotools.util.NumberRange;
 import org.geotools.util.SimpleInternationalString;
 import org.geotools.util.Utilities;
-import it.geosolutions.jaiext.utilities.ImageLayout2;
 import org.opengis.coverage.ColorInterpretation;
 import org.opengis.coverage.SampleDimension;
 import org.opengis.coverage.SampleDimensionType;
 import org.opengis.coverage.grid.GridCoverage;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.filter.Filter;
+import org.opengis.filter.expression.PropertyName;
 import org.opengis.filter.sort.SortBy;
 import org.opengis.filter.sort.SortOrder;
 import org.opengis.geometry.BoundingBox;
+import org.opengis.geometry.MismatchedDimensionException;
+import org.opengis.referencing.FactoryException;
+import org.opengis.referencing.crs.CoordinateReferenceSystem;
 import org.opengis.referencing.datum.PixelInCell;
 import org.opengis.referencing.operation.MathTransform;
 import org.opengis.referencing.operation.MathTransform2D;
@@ -102,10 +113,12 @@ import org.opengis.util.InternationalString;
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.util.Assert;
 
+import it.geosolutions.imageio.imageioimpl.EnhancedImageReadParam;
 import it.geosolutions.imageio.pam.PAMDataset;
 import it.geosolutions.jaiext.range.NoDataContainer;
 import it.geosolutions.jaiext.range.Range;
 import it.geosolutions.jaiext.range.RangeFactory;
+import it.geosolutions.jaiext.utilities.ImageLayout2;
 
 /**
  * A RasterLayerResponse. An instance of this class is produced everytime a requestCoverage is called to a reader.
@@ -272,6 +285,8 @@ public class RasterLayerResponse {
          */
         private List<SubmosaicProducer> granuleCollectors = new ArrayList<>();
 
+        private boolean heterogeneousCRS;
+
         /**
          * Default {@link Constructor}
          */
@@ -292,6 +307,7 @@ public class RasterLayerResponse {
         private MosaicProducer(final boolean dryRun, List<SubmosaicProducer> collectors) {
             this.granuleCollectors = collectors;
             this.mergeBehavior = request.getMergeBehavior();
+            this.heterogeneousCRS = collectors.stream().anyMatch(c -> c.isReprojecting());
         }
 
         /**
@@ -302,16 +318,35 @@ public class RasterLayerResponse {
          * If not {@link MergeBehavior#STACK}ing is required, we collect them all together with an include filter.
          */
         public void visit(GranuleDescriptor granuleDescriptor, SimpleFeature sf) {
-
             //
             // load raster data
             //
             // create a granuleDescriptor loader
             final Geometry bb = JTS.toGeometry((BoundingBox) mosaicBBox);
-            final Geometry inclusionGeometry = granuleDescriptor.getFootprint();
+            Geometry inclusionGeometry = granuleDescriptor.getFootprint();
             boolean intersects = false;
             if (inclusionGeometry != null) {
-                intersects = inclusionGeometry.intersects(bb);
+                CoordinateReferenceSystem granuleCRS = granuleDescriptor.getGranuleEnvelope().getCoordinateReferenceSystem();
+                CoordinateReferenceSystem mosaicCRS = mosaicBBox.getCoordinateReferenceSystem();
+                try {
+                    if(!CRS.equalsIgnoreMetadata(granuleCRS, mosaicCRS)) {
+                        ProjectionHandler handler = ProjectionHandlerFinder.getHandler(mosaicBBox, granuleCRS, true);
+                        MathTransform mt = CRS.findMathTransform(granuleCRS, mosaicCRS);
+                        if(handler != null) {
+                            Geometry preProcessed = handler.preProcess(inclusionGeometry);
+                            if(preProcessed != null) {
+                                Geometry transformed = JTS.transform(inclusionGeometry, mt);
+                                inclusionGeometry = handler.postProcess(mt.inverse(), transformed);
+                            }
+                        } else {
+                            inclusionGeometry = JTS.transform(inclusionGeometry, mt);
+                        }
+                    }
+                    intersects = inclusionGeometry.intersects(bb);
+                } catch (FactoryException | MismatchedDimensionException | TransformException e) {
+                    // in case there was a reprojection issue assume intersection
+                    intersects = true;
+                }
             }
             if (!footprintBehavior.handleFootprints() || inclusionGeometry == null
                     || (footprintBehavior.handleFootprints() && intersects)) {
@@ -326,9 +361,10 @@ public class RasterLayerResponse {
                     }
                 }
 
-                // did we find a place for it? If we are doing EGR then it's ok, otherwise not so much
-                if (!found && getExcessGranuleRemover() == null) {
-                    throw new IllegalStateException("Unable to locate a filter for this granule:\n"
+                // did we find a place for it? If we are doing EGR then it's ok, if we are dealing
+                // with an heterogenous CRS that also happens when zooming out a lot, otherwise not so much
+                if (!found && getExcessGranuleRemover() == null && !heterogeneousCRS) {
+                    throw new IllegalStateException("Unable to locate a granule collector accepting this granule:\n"
                             + granuleDescriptor.toString());
                 }
 
@@ -376,17 +412,13 @@ public class RasterLayerResponse {
                     LOGGER.fine("Submosaic producer being called: " + collector.toString());
                 }
                 final List<MosaicElement> preparedMosaic = collector.createMosaic();
-                size += preparedMosaic.size();
                 if (preparedMosaic.size() > 0
                         && !preparedMosaic.stream().allMatch(p -> p == null)) {
+                    size += preparedMosaic.size();
                     mosaicInputs.addAll(preparedMosaic);
                     if (first == null) {
                         first = collector;
                     }
-                } else {
-                    // we were not able to mosaic these granules, e.g. we have ROIs and the requested area
-                    // fell outside the ROI
-                    size--;
                 }
             }
             LOGGER.fine("Producing the final mosaic, step 2, final mosaicking");
@@ -476,7 +508,12 @@ public class RasterLayerResponse {
     private Hints hints;
 
     private String granulesPaths;
-    
+
+    /**
+     * See {@link GridCoverage2DReader#SOURCE_URL_PROPERTY}.
+     */
+    private URL sourceUrl;
+
     private ROIExcessGranuleRemover excessGranuleRemover;
 
     /**
@@ -703,7 +740,7 @@ public class RasterLayerResponse {
         // SG using the above may lead to problems since the reason is that may be a little (1 px) bigger
         // than what we need. The code below is a bit better since it uses a proper logic (see GridEnvelope
         // Javadoc)
-        // rasterBounds = new GridEnvelope2D(new Envelope2D(tempRasterBounds), PixelInCell.CELL_CORNER);
+        rasterBounds = new GridEnvelope2D(new Envelope2D(tempRasterBounds), PixelInCell.CELL_CORNER);
         if (rasterBounds.width == 0)
             rasterBounds.width++;
         if (rasterBounds.height == 0)
@@ -842,11 +879,31 @@ public class RasterLayerResponse {
             if (request.getMaximumNumberOfGranules() > 0) {
                 query.setMaxFeatures(request.getMaximumNumberOfGranules());
             }
-            bbox = FeatureUtilities.DEFAULT_FILTER_FACTORY
-                    .bbox(FeatureUtilities.DEFAULT_FILTER_FACTORY
-                            .property(rasterManager.getGranuleCatalog().getType(typeName)
-                                    .getGeometryDescriptor().getName()),
-                            mosaicBBox);
+            final PropertyName geometryProperty = FeatureUtilities.DEFAULT_FILTER_FACTORY
+                    .property(rasterManager.getGranuleCatalog().getType(typeName)
+                            .getGeometryDescriptor().getName());
+            if(request.isHeterogeneousGranules()) {
+                ProjectionHandler handler = ProjectionHandlerFinder.getHandler(mosaicBBox, mosaicBBox.getCoordinateReferenceSystem(), true);
+                if(handler != null) {
+                    List<ReferencedEnvelope> envelopes = handler.getQueryEnvelopes();
+                    if(envelopes != null && envelopes.size() > 0) {
+                        List<Filter> filters = new ArrayList<>();
+                        for (ReferencedEnvelope envelope : envelopes) {
+                            Filter f = FeatureUtilities.DEFAULT_FILTER_FACTORY.bbox(geometryProperty, envelope);
+                            filters.add(f);
+                        }
+                        if(envelopes.size() == 1) {
+                            bbox = filters.get(0);
+                        } else {
+                            bbox = FeatureUtilities.DEFAULT_FILTER_FACTORY.or(filters);
+                        }
+                    }
+                    
+                }
+            }
+            if(bbox == null) {
+                bbox = FeatureUtilities.DEFAULT_FILTER_FACTORY.bbox(geometryProperty, mosaicBBox);
+            }
             query.setFilter(bbox);
             return query;
         } else {
@@ -911,11 +968,13 @@ public class RasterLayerResponse {
      * Handles the optional {@link SortBy} clause for the query to the catalog
      *
      * @param query the {@link Query} to set the {@link SortBy} for.
+     * @throws IOException 
      */
-    private void handleSortByClause(final Query query) {
+    private void handleSortByClause(final Query query) throws IOException {
         Utilities.ensureNonNull("query", query);
         LOGGER.fine("Prepping to manage SortBy Clause");
         final String sortByClause = request.getSortClause();
+        final GranuleCatalog catalog = rasterManager.getGranuleCatalog();
         if (sortByClause != null && sortByClause.length() > 0) {
             final String[] elements = sortByClause.split(",");
             if (elements != null && elements.length > 0) {
@@ -956,12 +1015,22 @@ public class RasterLayerResponse {
                 // assign to query if sorting is supported!
 
                 this.sortBy = clauses.toArray(new SortBy[] {});
-                if (rasterManager.getGranuleCatalog()
+                if (catalog
                         .getQueryCapabilities(rasterManager.getTypeName()).supportsSorting(sortBy)) {
                     query.setSortBy(sortBy);
                 }
             } else {
                 LOGGER.fine("No SortBy Clause");
+            }
+        } else {
+            // no specified sorting, is this a heterogeneous CRS mosaic?
+            String crsAttribute = rasterManager.getCrsAttribute();
+            if(crsAttribute != null) {
+                SortBy sort = new SortByImpl(FeatureUtilities.DEFAULT_FILTER_FACTORY.property(crsAttribute), SortOrder.ASCENDING);
+                this.sortBy = new SortBy[] {sort};
+                if (catalog.getQueryCapabilities(rasterManager.getTypeName()).supportsSorting(sortBy)) {
+                    query.setSortBy(sortBy);
+                }               
             }
         }
     }
@@ -1193,12 +1262,13 @@ public class RasterLayerResponse {
         }
 
         // creating the final coverage by keeping into account the fact that we
-        Map<String, Object> properties = null;
+        Map<String, Object> properties = new HashMap<String, Object>();
         if (granulesPaths != null) {
-            properties = new HashMap<String, Object>();
-            properties.put(AbstractGridCoverage2DReader.FILE_SOURCE_PROPERTY, granulesPaths);
+            properties.put(GridCoverage2DReader.FILE_SOURCE_PROPERTY, granulesPaths);
         }
-
+        if (sourceUrl != null) {
+            properties.put(GridCoverage2DReader.SOURCE_URL_PROPERTY, sourceUrl);
+        }
         if (mosaicOutput.pamDataset != null) {
             properties.put(Utils.PAM_DATASET, mosaicOutput.pamDataset);
         }
@@ -1294,6 +1364,15 @@ public class RasterLayerResponse {
         this.granulesPaths = granulesPaths;
     }
 
+    /**
+     * See {@link GridCoverage2DReader#SOURCE_URL_PROPERTY}.
+     * 
+     * @param sourceUrl
+     */
+    public void setSourceUrl(URL sourceUrl) {
+        this.sourceUrl = sourceUrl;
+    }
+
     public int getDefaultArtifactsFilterThreshold() {
         return defaultArtifactsFilterThreshold;
     }
@@ -1313,4 +1392,37 @@ public class RasterLayerResponse {
     public ROIExcessGranuleRemover getExcessGranuleRemover() {
         return excessGranuleRemover;
     }
+    
+    /**
+     * Builds an alternate view of request/response/manager based on a template descriptor
+     * @param templateDescriptor
+     * @return
+     * @throws Exception
+     */
+    public RasterLayerResponse reprojectTo(GranuleDescriptor templateDescriptor) throws Exception {
+        // optimization in case the granule CRS and the mosaic CRS correspond
+        CoordinateReferenceSystem granuleCRS = templateDescriptor.getGranuleEnvelope().getCoordinateReferenceSystem();
+        if(CRS.equalsIgnoreMetadata(rasterManager.spatialDomainManager.coverageCRS2D, granuleCRS)) {
+            return this;
+        }
+        
+        // rebuild
+        RasterLayerRequest originalRequest = this.getRequest();
+        RasterManager originalRasterManager = originalRequest.getRasterManager();
+        RasterManager manager = originalRasterManager.getForGranuleCRS(templateDescriptor, this.mosaicBBox);
+        RasterLayerRequest request = new RasterLayerRequest(originalRequest.getParams(), manager);
+        if(request.spatialRequestHelper.isEmpty()) {
+            return null;
+        }
+        RasterLayerResponse response = new RasterLayerResponse(request, manager,
+                this.submosaicProducerFactory);
+        // initialize enough info without actually running the output computation
+        response.chooseOverview();
+        response.initBBOX();
+        response.initTransformations();
+        response.initRasterBounds();
+
+        return response;
+    }
+    
 }

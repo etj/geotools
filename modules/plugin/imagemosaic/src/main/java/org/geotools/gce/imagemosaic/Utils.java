@@ -78,6 +78,7 @@ import org.apache.commons.io.filefilter.IOFileFilter;
 import org.geotools.data.DataAccessFactory.Param;
 import org.geotools.data.DataStoreFactorySpi;
 import org.geotools.data.DataUtilities;
+import org.geotools.data.Repository;
 import org.geotools.data.shapefile.ShapefileDataStoreFactory;
 import org.geotools.factory.CommonFactoryFinder;
 import org.geotools.factory.Hints;
@@ -90,10 +91,14 @@ import org.geotools.gce.imagemosaic.catalog.index.ObjectFactory;
 import org.geotools.gce.imagemosaic.catalog.index.ParametersType.Parameter;
 import org.geotools.gce.imagemosaic.catalogbuilder.CatalogBuilderConfiguration;
 import org.geotools.gce.imagemosaic.granulecollector.ReprojectingSubmosaicProducerFactory;
+import org.geotools.geometry.jts.JTS;
 import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.geotools.image.io.ImageIOExt;
 import org.geotools.referencing.CRS;
+import org.geotools.referencing.CRS.AxisOrder;
 import org.geotools.referencing.operation.matrix.XAffineTransform;
+import org.geotools.renderer.crs.ProjectionHandler;
+import org.geotools.renderer.crs.ProjectionHandlerFinder;
 import org.geotools.resources.coverage.CoverageUtilities;
 import org.geotools.resources.i18n.ErrorKeys;
 import org.geotools.resources.i18n.Errors;
@@ -105,7 +110,10 @@ import org.opengis.feature.type.AttributeDescriptor;
 import org.opengis.filter.FilterFactory2;
 import org.opengis.filter.spatial.BBOX;
 import org.opengis.referencing.FactoryException;
+import org.opengis.referencing.NoSuchAuthorityCodeException;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
+import org.opengis.referencing.operation.MathTransform;
+import org.opengis.referencing.operation.TransformException;
 
 import com.vividsolutions.jts.geom.Envelope;
 import com.vividsolutions.jts.geom.Geometry;
@@ -144,6 +152,8 @@ public class Utils {
     public final static Key PARENT_DIR = new Key(String.class);
 
     public final static Key MOSAIC_READER = new Key(ImageMosaicReader.class);
+    
+    public final static Key REPOSITORY = new Key(Repository.class);
 
     public final static String RANGE_SPLITTER_CHAR = ";";
 
@@ -228,6 +238,8 @@ public class Utils {
 
         public static final String ADDITIONAL_DOMAIN_ATTRIBUTES = "AdditionalDomainAttributes";
 
+        public static final String CRS_ATTRIBUTE = "CrsAttribute";
+        
         /**
          * Sets if the target schema should be used to locate granules (default is FALSE)<br/>
          * {@value TRUE|FALSE}
@@ -235,6 +247,8 @@ public class Utils {
         public final static String USE_EXISTING_SCHEMA = "UseExistingSchema";
 
         public final static String TYPENAME = "TypeName";
+        
+        public final static String STORE_NAME = "StoreName";
 
         public final static String PATH_TYPE = "PathType";
 
@@ -399,6 +413,7 @@ public class Utils {
 
         // create a mosaic index builder and set the relevant elements
         final CatalogBuilderConfiguration configuration = new CatalogBuilderConfiguration();
+        // check if the indexer.properties is there
         configuration.setHints(hints);// retain hints as this may contain an instance of an ImageMosaicReader
         List<Parameter> parameterList = configuration.getIndexer().getParameters().getParameter();
 
@@ -649,6 +664,14 @@ public class Utils {
                     .trim();
             retValue.setElevationAttribute(elevationAttribute);
         }
+        
+        //
+        // crs attribute is optional
+        //
+        if (properties.containsKey(Prop.CRS_ATTRIBUTE)) {
+            final String crsAttribute = properties.getProperty(Prop.CRS_ATTRIBUTE).trim();
+            retValue.setCRSAttribute(crsAttribute);
+        }
 
         //
         // additional domain attribute is optional
@@ -708,6 +731,12 @@ public class Utils {
                     .valueOf(properties.getProperty(Prop.HETEROGENEOUS, "false").trim());
             catalogConfigurationBean.setHeterogeneous(heterogeneous);
         }
+        if (!catalogConfigurationBean.isHeterogeneous() && (!ignoreSome || !ignorePropertiesSet.contains(Prop.HETEROGENEOUS_CRS))) {
+            final boolean heterogeneous = Boolean
+                    .valueOf(properties.getProperty(Prop.HETEROGENEOUS_CRS, "false").trim());
+            catalogConfigurationBean.setHeterogeneous(heterogeneous);
+        }
+
 
         //
         // Absolute or relative path
@@ -785,7 +814,7 @@ public class Utils {
     }
 
     private static CoordinateReferenceSystem decodeSrs(String property) throws FactoryException {
-        return CRS.decode(property);
+        return CRS.decode(property, true);
     }
 
     private static Indexer loadIndexer(File parentFolder) {
@@ -1343,6 +1372,15 @@ public class Utils {
     }
 
     private static String getDefaultIndexName(final String locationPath) {
+        String name = getIndexerProperty(locationPath, Utils.Prop.NAME);
+        if (name != null) {
+            return name;
+        }
+
+        return FilenameUtils.getName(locationPath);
+    }
+
+    public static String getIndexerProperty(String locationPath, String propertyName) {
         if (locationPath == null) {
             return null;
         }
@@ -1353,7 +1391,7 @@ public class Utils {
                 URL indexerUrl = DataUtilities.fileToURL(indexer);
                 Properties config = CoverageUtilities.loadPropertiesFromURL(indexerUrl);
                 if (config != null && config.get(Utils.Prop.NAME) != null) {
-                    return (String) config.get(Utils.Prop.NAME);
+                    return (String) config.get(propertyName);
                 }
             }
             indexer = new File(file, IndexerUtils.INDEXER_XML);
@@ -1362,8 +1400,8 @@ public class Utils {
                 return name;
             }
         }
-
-        return FilenameUtils.getName(locationPath);
+        
+        return null;
     }
 
     /**
@@ -2104,5 +2142,71 @@ public class Utils {
         AttributeDescriptor location = schema.getDescriptor(locationAttributeName);
         return location != null
                 && CharSequence.class.isAssignableFrom(location.getType().getBinding());
+    }
+    
+    public static ReferencedEnvelope reprojectEnvelope(ReferencedEnvelope sourceEnvelope, CoordinateReferenceSystem targetCRS, ReferencedEnvelope targetReferenceEnvelope)
+            throws FactoryException, TransformException {
+        Geometry reprojected = Utils.reprojectEnvelopeToGeometry(sourceEnvelope, targetCRS, targetReferenceEnvelope);
+        if(reprojected == null) {
+            return new ReferencedEnvelope(targetCRS);
+        } else {
+            if(reprojected.getNumGeometries() > 1) {
+                return new ReferencedEnvelope(reprojected.getGeometryN(0).getEnvelopeInternal(), targetCRS);
+            } else {
+                return new ReferencedEnvelope(reprojected.getEnvelopeInternal(), targetCRS);
+            }
+        }
+
+    }
+    
+    public static Geometry reprojectEnvelopeToGeometry(ReferencedEnvelope sourceEnvelope, CoordinateReferenceSystem targetCRS, ReferencedEnvelope targetReferenceEnvelope)
+            throws FactoryException, TransformException {
+        ProjectionHandler handler;
+        CoordinateReferenceSystem sourceCRS = sourceEnvelope.getCoordinateReferenceSystem();
+        if(targetReferenceEnvelope == null) {
+            targetReferenceEnvelope = ReferencedEnvelope.reference(getCRSEnvelope(targetCRS));
+        }
+        if(targetReferenceEnvelope != null) {
+            handler = ProjectionHandlerFinder.getHandler(targetReferenceEnvelope, sourceCRS, true);
+        } else {
+            // cannot handle wrapping if we do not have a reference envelope, but
+            // cutting/adapting will still work
+            ReferencedEnvelope reference = new ReferencedEnvelope(targetCRS);
+            handler = ProjectionHandlerFinder.getHandler(reference, sourceCRS, false);
+        }
+        
+        if(handler != null) {
+            MathTransform transform = CRS.findMathTransform(sourceCRS, targetCRS);
+            Geometry footprint = JTS.toGeometry(sourceEnvelope);
+            Geometry preProcessed = handler.preProcess(footprint);
+            if(preProcessed == null) {
+                return null;
+            }
+            Geometry transformed = JTS.transform(preProcessed, transform);
+            // this might generate multipolygons for data crossing the dataline, which 
+            // is actually what we want
+            Geometry postProcessed = handler.postProcess(transform.inverse(), transformed);
+            if(postProcessed == null) {
+                return null;
+            }
+            return postProcessed;
+        } else {
+            sourceEnvelope = new ReferencedEnvelope(CRS.transform(sourceEnvelope, targetCRS));
+        }
+        
+        
+        return JTS.toGeometry(sourceEnvelope);
+    }
+
+    private static org.opengis.geometry.Envelope getCRSEnvelope(CoordinateReferenceSystem targetCRS)
+            throws FactoryException, NoSuchAuthorityCodeException {
+        if(targetCRS.getDomainOfValidity() == null) {
+            Integer code = CRS.lookupEpsgCode(targetCRS, true);
+            if(code != null) {
+                CRS.decode("EPSG:" + code, CRS.getAxisOrder(targetCRS) != AxisOrder.NORTH_EAST);
+            }
+        }
+        org.opengis.geometry.Envelope envelope = CRS.getEnvelope(targetCRS);
+        return envelope;
     }
 }

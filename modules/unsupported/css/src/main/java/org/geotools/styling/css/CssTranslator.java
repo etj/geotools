@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -217,6 +218,7 @@ public class CssTranslator {
             put("-gt-label-force-ltr", "forceLeftToRight");
             put("-gt-label-conflict-resolution", "conflictResolution");
             put("-gt-label-fit-goodness", "goodnessOfFit");
+            put("-gt-label-kerning", "kerning");
             put("-gt-shield-resize", "graphic-resize");
             put("-gt-shield-margin", "graphic-margin");
         }
@@ -890,7 +892,7 @@ public class CssTranslator {
         // see if we can fold the stroke into a polygon symbolizer
         boolean generateStroke = cssRule.hasProperty(PseudoClass.ROOT, "stroke");
         boolean lineSymbolizerSpecificProperties = cssRule.hasAnyProperty(PseudoClass.ROOT,
-                LINE_VENDOR_OPTIONS.keySet());
+                LINE_VENDOR_OPTIONS.keySet()) || !sameGeometry(cssRule, "stroke-geometry", "fill-geometry");
         boolean includeStrokeInPolygonSymbolizer = generateStroke
                 && !lineSymbolizerSpecificProperties;
         boolean generatePolygonSymbolizer = cssRule.hasProperty(PseudoClass.ROOT, "fill");
@@ -909,6 +911,12 @@ public class CssTranslator {
         if (cssRule.hasProperty(PseudoClass.ROOT, "raster-channels")) {
             addRasterSymbolizer(cssRule, ruleBuilder);
         }
+    }
+
+    private boolean sameGeometry(CssRule cssRule, String geomProperty1, String geomProperty2) {
+        Property p1 = cssRule.getProperty(PseudoClass.ROOT, geomProperty1);
+        Property p2 = cssRule.getProperty(PseudoClass.ROOT, geomProperty2);
+        return Objects.equals(p1, p2);
     }
 
     private String getCombinedTag(String comment, Pattern p, String separator) {
@@ -1422,7 +1430,7 @@ public class CssTranslator {
     private void buildFill(CssRule cssRule, final FillBuilder fb, Map<String, List<Value>> values,
             int i) {
         for (Value fillValue : getMultiValue(values, "fill", i)) {
-            if (fillValue instanceof Function) {
+            if (Function.isGraphicsFunction(fillValue)) {
                 new SubgraphicBuilder("fill", fillValue, values, cssRule, i) {
 
                     @Override
@@ -1500,7 +1508,7 @@ public class CssTranslator {
 
         boolean simpleStroke = false;
         for (Value strokeValue : getMultiValue(values, "stroke", i)) {
-            if (strokeValue instanceof Function) {
+            if (Function.isGraphicsFunction(strokeValue)) {
                 new SubgraphicBuilder("stroke", strokeValue, values, cssRule, i) {
 
                     @Override

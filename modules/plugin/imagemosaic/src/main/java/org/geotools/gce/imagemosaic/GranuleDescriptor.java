@@ -23,6 +23,7 @@ import java.awt.geom.AffineTransform;
 import java.awt.geom.NoninvertibleTransformException;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.ColorModel;
+import java.awt.image.IndexColorModel;
 import java.awt.image.RenderedImage;
 import java.io.File;
 import java.io.IOException;
@@ -37,6 +38,7 @@ import java.util.logging.Logger;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReadParam;
 import javax.imageio.ImageReader;
+import javax.imageio.ImageTypeSpecifier;
 import javax.imageio.spi.ImageInputStreamSpi;
 import javax.imageio.spi.ImageReaderSpi;
 import javax.imageio.stream.ImageInputStream;
@@ -91,6 +93,7 @@ import org.opengis.referencing.operation.TransformException;
 
 import com.vividsolutions.jts.geom.Geometry;
 
+import it.geosolutions.imageio.imageioimpl.EnhancedImageReadParam;
 import it.geosolutions.imageio.maskband.DatasetLayout;
 import it.geosolutions.imageio.pam.PAMDataset;
 import it.geosolutions.imageio.pam.PAMParser;
@@ -356,6 +359,10 @@ public class GranuleDescriptor {
             gcReader = format.getReader(granuleFile, hints);
             // Getting Dataset Layout
             layout = gcReader.getDatasetLayout();
+            if(heterogeneousGranules) {
+                // do not trust the index, use the reader instead (reprojection might be involved)
+                this.granuleBBOX = ReferencedEnvelope.reference(gcReader.getOriginalEnvelope());
+            }
             //
             // get info about the raster we have to read
             //
@@ -415,7 +422,7 @@ public class GranuleDescriptor {
             // we do not have such info, hence we assume that it is a simple
             // scale and translate
             this.geMapper = new GridToEnvelopeMapper(new GridEnvelope2D(originalDimension),
-                    granuleBBOX);
+                    this.granuleBBOX);
             geMapper.setPixelAnchor(PixelInCell.CELL_CENTER);// this is the default behavior but it is nice to write it down anyway
             this.baseGridToWorld = geMapper.createAffineTransform();
 
@@ -491,6 +498,10 @@ public class GranuleDescriptor {
             }
 
         }
+    }
+
+    public OverviewsController getOverviewsController() {
+        return overviewsController;
     }
 
     /**
@@ -575,6 +586,16 @@ public class GranuleDescriptor {
             final int maxDecimationFactor, final boolean heterogeneousGranules,
             final boolean handleArtifactsFiltering) {
 
+        this(granuleLocation, granuleBBox, suggestedSPI, roiProvider, maxDecimationFactor,
+                heterogeneousGranules, handleArtifactsFiltering, null);
+
+    }
+
+    public GranuleDescriptor(final String granuleLocation, final BoundingBox granuleBBox,
+            final ImageReaderSpi suggestedSPI, final MultiLevelROI roiProvider,
+            final int maxDecimationFactor, final boolean heterogeneousGranules,
+            final boolean handleArtifactsFiltering, final Hints hints) {
+
         this.maxDecimationFactor = maxDecimationFactor;
         final URL rasterFile = DataUtilities.fileToURL(new File(granuleLocation));
 
@@ -588,8 +609,7 @@ public class GranuleDescriptor {
 
         this.originator = null;
         init(granuleBBox, rasterFile, suggestedSPI, roiProvider, heterogeneousGranules,
-                handleArtifactsFiltering, null);
-
+                handleArtifactsFiltering, hints);
     }
 
     /**
@@ -858,9 +878,8 @@ public class GranuleDescriptor {
             // which source area we need to crop in the selected level taking
             // into account the scale factors imposed by the selection of this
             // level together with the base level grid to world transformation
-            AffineTransform2D cropWorldToGrid = new AffineTransform2D(
-                    selectedlevel.gridToWorldTransformCorner);
-            cropWorldToGrid = (AffineTransform2D) cropWorldToGrid.inverse();
+            AffineTransform2D cropGridToWorld = new AffineTransform2D(selectedlevel.gridToWorldTransformCorner);
+            AffineTransform2D cropWorldToGrid = (AffineTransform2D) cropGridToWorld.inverse();
             // computing the crop source area which lives into the
             // selected level raster space, NOTICE that at the end we need to
             // take into account the fact that we might also decimate therefore
@@ -912,6 +931,15 @@ public class GranuleDescriptor {
 
             // set the source region
             readParameters.setSourceRegion(sourceArea);
+            
+            // don't pass down the band selection if the original color model is indexed and
+            // color expansion is enabled
+            final boolean expandToRGB = request.getRasterManager().isExpandMe();
+            if(expandToRGB && getRawColorModel(reader, ovrIndex) instanceof IndexColorModel && readParameters instanceof EnhancedImageReadParam) {
+                EnhancedImageReadParam erp = (EnhancedImageReadParam) readParameters;
+                erp.setBands(null);
+            }
+            
             RenderedImage raster;
             try {
                 // read
@@ -934,6 +962,11 @@ public class GranuleDescriptor {
             // be used to know if the low level reader already performed the bands selection or if
             // image mosaic is responsible for do it
             if(request.getBands() != null && !reader.getFormatName().equalsIgnoreCase("netcdf")) {
+                // if we are expanding the color model, do so before selecting the bands
+                if(raster.getColorModel() instanceof IndexColorModel && expandToRGB) {
+                    raster = new ImageWorker(raster).forceComponentColorModel().getRenderedImage();                    
+                }
+                
                 int[] bands = request.getBands();
                 // delegate the band selection operation on JAI BandSelect operation
                 raster = new ImageWorker(raster).retainBands(bands).getRenderedImage();
@@ -1010,8 +1043,9 @@ public class GranuleDescriptor {
                     }
                     // Check for Raster ROI
                     if (transformed == null || transformed.getBounds().isEmpty()) {
-                        if (LOGGER.isLoggable(java.util.logging.Level.INFO))
-                            LOGGER.info("Unable to create a granuleDescriptor " + this.toString()
+                        // ROI is less than a pixel big, it happens when zooming out 
+                        if (LOGGER.isLoggable(java.util.logging.Level.FINE))
+                            LOGGER.fine("Unable to create a granuleDescriptor " + this.toString()
                                     + " due to a problem when managing the ROI");
                         return null;
                     }
@@ -1041,8 +1075,8 @@ public class GranuleDescriptor {
                     (float) finalRaster2Model.getTranslateX(),
                     (float) finalRaster2Model.getTranslateY(), interpolation);
             if (finalLayout.isEmpty()) {
-                if (LOGGER.isLoggable(java.util.logging.Level.INFO))
-                    LOGGER.info("Unable to create a granuleDescriptor " + this.toString()
+                if (LOGGER.isLoggable(java.util.logging.Level.FINE))
+                    LOGGER.fine("Unable to create a granuleDescriptor " + this.toString()
                             + " due to jai scale bug creating a null source area");
                 return null;
             }
@@ -1163,6 +1197,27 @@ public class GranuleDescriptor {
                 }
             }
         }
+    }
+
+    /**
+     * Returns the raw color model of the reader at the specified image index
+     * @param reader
+     * @param imageIndex
+     * @return
+     */
+    private ColorModel getRawColorModel(ImageReader reader, int imageIndex) {
+        try {
+            ImageTypeSpecifier imageType = reader.getRawImageType(imageIndex);
+            if(imageType == null) {
+                return null;
+            }
+            ColorModel cm = imageType.getColorModel();
+            return cm;
+        } catch(Exception e) {
+            LOGGER.log(Level.FINE, "Failed to determine the native color model of the reader", e);
+        }
+        
+        return null;
     }
 
     private GranuleOverviewLevelDescriptor getLevel(final int index, final ImageReader reader,

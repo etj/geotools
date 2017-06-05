@@ -16,12 +16,11 @@
  */
 package org.geotools.coverage.processing;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.hamcrest.CoreMatchers.instanceOf;
+import static org.hamcrest.CoreMatchers.not;
+import static org.junit.Assert.*;
 
+import java.awt.Image;
 import java.awt.Rectangle;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
@@ -55,6 +54,7 @@ import org.geotools.referencing.crs.DefaultGeographicCRS;
 import org.geotools.referencing.operation.transform.AffineTransform2D;
 import org.geotools.referencing.operation.transform.ProjectiveTransform;
 import org.geotools.resources.coverage.CoverageUtilities;
+import org.hamcrest.CoreMatchers;
 import org.junit.Before;
 import org.junit.Test;
 import org.opengis.geometry.Envelope;
@@ -167,9 +167,18 @@ public final class CropTest extends GridProcessingTestBase {
         CoverageUtilities.setNoDataProperty(properties, theNoData);
         GridCoverage2D source = new GridCoverageFactory().create(coverage.getName().toString(), coverage.getRenderedImage(), coverage.getEnvelope(), coverage.getSampleDimensions(), null, properties);
         
+        // check the grid coverage
         GridCoverage2D cropped = testCrop(source);
         NoDataContainer noData = CoverageUtilities.getNoDataProperty(cropped);
         assertEquals(theNoData, noData.getAsSingleValue(), 0d);
+        
+        // but also check the image
+        RenderedImage renderedImage = cropped.getRenderedImage();
+        Object property = renderedImage.getProperty(NoDataContainer.GC_NODATA);
+        assertNotEquals(property, Image.UndefinedProperty);
+        assertThat(property, instanceOf(NoDataContainer.class));
+        NoDataContainer nd = (NoDataContainer) property;
+        assertEquals(-123, nd.getAsSingleValue(), 0d);
     }
     
     /**
@@ -581,28 +590,10 @@ public final class CropTest extends GridProcessingTestBase {
         param.parameter("ROI").setValue(mask);
 
         GridCoverage2D cropped = (GridCoverage2D) processor.doOperation(param);
-        if (SHOW) {
-            Viewer.show(coverage, "Original");
-            Viewer.show(cropped, "Cropped");
-            Thread.sleep(10000);
-        } else {
-            // Force computation
-            assertNotNull(PlanarImage.wrapRenderedImage(cropped.getRenderedImage()).getTiles());
-        }
+        cropped = (GridCoverage2D) processor.doOperation(param);
         RenderedImage raster = cropped.getRenderedImage();
 
-        // Checking pixel values in the top left corner (0,0)
-        // It's not zero due to having used a crop instead of a mosaic
-        assertEquals(240, raster.getTile(0, 0).getSample(0, 0, 0));
-        assertTrue(cropEnvelope.equals(cropped.getEnvelope()));
-
-        // Forcing the mosaic operation and repeating the computation
-        param.parameter("ForceMosaic").setValue(true);
-
-        cropped = (GridCoverage2D) processor.doOperation(param);
-        raster = cropped.getRenderedImage();
-
-        // Now the value should be zero since we have cut away the corner
+        // The value should be zero since we have cut away the corner
         assertEquals(0, raster.getTile(0, 0).getSample(0, 0, 0));
         assertTrue(cropEnvelope.equals(cropped.getEnvelope()));
     }

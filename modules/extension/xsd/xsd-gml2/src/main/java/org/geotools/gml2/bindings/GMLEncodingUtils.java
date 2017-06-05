@@ -18,11 +18,13 @@ package org.geotools.gml2.bindings;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
@@ -90,6 +92,7 @@ public class GMLEncodingUtils {
         this.gml = gml;
     }
     
+    @SuppressWarnings({ "rawtypes", "unchecked" })
     public List AbstractFeatureType_getProperties(Object object,
             XSDElementDeclaration element, SchemaIndex schemaIndex, Set<String> toFilter,
             Configuration configuration) {
@@ -158,6 +161,7 @@ public class GMLEncodingUtils {
 
         List particles = Schemas.getChildElementParticles(type, true);
         List properties = new ArrayList();
+        Set<Name> unsubstPropertyNames = null;
 
     O:  for (int i = 0; i < particles.size(); i++) {
             XSDParticle particle = (XSDParticle) particles.get(i);
@@ -220,8 +224,47 @@ public class GMLEncodingUtils {
                 if (!isValidDescriptor(featureType, propertyName)) {
                     continue;
                 }
+                Collection<Property> featureProperties = feature.getProperties(propertyName);
+                //if no feature properties are found for this element check substitution groups
+                if (featureProperties.size() == 0) {
+                    if (unsubstPropertyNames == null) {
+                        // lazy initialisation of a set of all property names that 
+                        // will be obtained without considering substitution groups
+                        unsubstPropertyNames = (Set<Name>) particles.stream().map(new Function() {
+
+                            @Override
+                            public Object apply(Object particle) {
+                                XSDElementDeclaration attr = (XSDElementDeclaration) ((XSDParticle) particle)
+                                        .getContent();
+                                if (attr.isElementDeclarationReference()) {
+                                    attr = attr.getResolvedElementDeclaration();
+                                }
+                                return new NameImpl(attr.getTargetNamespace(), attr.getName());
+                            }
+
+                        }).collect(Collectors.toSet());
+
+                    }
+                    for (XSDElementDeclaration xsdElementDeclaration : attribute
+                            .getSubstitutionGroup()) {
+                        Name substPropertyName = new NameImpl(
+                                xsdElementDeclaration.getTargetNamespace(),
+                                xsdElementDeclaration.getName());
+                        if (!unsubstPropertyNames.contains(substPropertyName)) {
+                            featureProperties = feature.getProperties(substPropertyName);
+                            if (featureProperties.size() > 0) {
+                                // the particle is used outside this class, replace
+                                // the particle with the correct substituted element
+                                particle = (XSDParticle) particle.cloneConcreteComponent(true,
+                                        false);
+                                particle.setContent(xsdElementDeclaration);
+                                break;
+                            }
+                        }
+                    }
+                }
                 // get the value (might be multiple)
-                for (Property property : feature.getProperties(propertyName)) {
+                for (Property property : featureProperties) {
                     Object value;
                     if (property instanceof ComplexAttribute) {
                         // do not unpack complex attributes as these may have their own bindings, which
