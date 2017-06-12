@@ -123,56 +123,69 @@ public class WMTSCoverageReader extends AbstractGridCoverage2DReader {
         this.wmts = server;
 
         // init the reader
-        addLayer(layer);
+        setLayer(layer);
 
         // best guess at the format with a preference for PNG (since it's normally transparent)
         List<String> formats = ((WMTSLayer) layer).getFormats();// wms2.getCapabilities().getRequest().getGetTile().getFormats();
         this.format = formats.iterator().next();
-        for (String format : formats) {
-            if ("image/png".equals(format) || "image/png24".equals(format) || "png".equals(format)
-                    || "png24".equals(format) || "image/png; mode=24bit".equals(format)) {
-                this.format = format;
+        for (String f : formats) {
+            if ("image/png".equals(f) || "image/png24".equals(f) || "png".equals(f)
+                    || "png24".equals(f) || "image/png; mode=24bit".equals(f)) {
+                this.format = f;
                 break;
             }
         }
 
     }
 
-    void addLayer(org.geotools.data.ows.Layer layer2) {
-        this.layer = (org.geotools.data.wmts.WMTSLayer) layer2;
-        
-        if (srsName == null) {
-            // initialize from first layer
-            
-            for (String srs : layer2.getSrs()) {
-                try {
-                    // check it's valid, if not we crap out and move to the next
-                    CRS.decode(srs);
-                    srsName = srs;
-                    LOGGER.info("setting CRS: "+srsName);
-                    break;
-                } catch (Exception e) {
-                    // it's fine, we could not decode that code
+    void setLayer(org.geotools.data.ows.Layer owsLayer) {
+        this.layer = (org.geotools.data.wmts.WMTSLayer) owsLayer;
+
+        if (srsName == null) { // initialize from first (unique) layer
+
+            // prefer 4326
+            for (String preferred : new String[]{"EPSG:4326", "WGS84", "CRS:84", "WGS 84", "WGS84(DD)"}) {
+                if (owsLayer.getSrs().contains(preferred)) {
+                    srsName = preferred;
+                    LOGGER.info("defaulting CRS to: "+srsName);
+                }
+            }
+
+            // no 4326, let's see if the layer is offering something valid
+            if (srsName == null ) {
+                for (String srs : owsLayer.getSrs()) {
+                    try {
+                        // check it's valid, if not we crap out and move to the next
+                        CRS.decode(srs);
+                        srsName = srs;
+                        LOGGER.info("setting CRS: "+srsName);
+                        break;
+                    } catch (Exception e) {
+                        // it's fine, we could not decode that code
+                    }
                 }
             }
 
             if (srsName == null ) {
-                if (layer2.getSrs().isEmpty()||layer2.getSrs().contains("EPSG:4326")) {
-                    // otherwise we try 4326
+                if (owsLayer.getSrs().isEmpty()) {
+                    // force  4326
                     srsName = "EPSG:4326";
-                    LOGGER.info("defaulting CRS to: "+srsName);
-                    layer2.getSrs().add(srsName);
+                    LOGGER.info("adding default CRS to: "+srsName);
+                    owsLayer.getSrs().add(srsName);
                 } else {
                     // if not even that works we just take the first...
-                    srsName = layer2.getSrs().iterator().next();
+                    srsName = owsLayer.getSrs().iterator().next();
                     LOGGER.info("guessing CRS to: "+srsName);
-
                 }
             }
-            validSRS = layer2.getSrs();
+            
+            validSRS = owsLayer.getSrs();
+
         } else {
+            LOGGER.info("TODO: check if this code path is ever run");
+
             Set<String> intersection = new HashSet<String>(validSRS);
-            intersection.retainAll(layer2.getSrs());
+            intersection.retainAll(owsLayer.getSrs());
 
             // can we reuse what we have?
             if (!intersection.contains(srsName)) {
@@ -194,7 +207,7 @@ public class WMTSCoverageReader extends AbstractGridCoverage2DReader {
         try {
             crs = CRS.decode(srsName);
         } catch (Exception e) {
-            LOGGER.log(Level.FINE, "Bounds unavailable for layer" + layer2);
+            LOGGER.log(Level.FINE, "Bounds unavailable for layer" + owsLayer);
         }
         this.crs = crs;
         this.requestCRS = crs;
@@ -286,19 +299,19 @@ public class WMTSCoverageReader extends AbstractGridCoverage2DReader {
     GridCoverage2D getMap(ReferencedEnvelope requestedEnvelope, int width, int height,
             Color backgroundColor) throws IOException {
         // build the request
-        ReferencedEnvelope gridEnvelope = initMapRequest(requestedEnvelope, width, height,
+        ReferencedEnvelope gridEnvelope = initTileRequest(requestedEnvelope, width, height,
                 backgroundColor);
 
         // issue the request and wrap response in a grid coverage
         try {
             if (LOGGER.isLoggable(Level.FINE)) {
-                LOGGER.fine("Issuing request: " + getMapRequest().getFinalURL());
+                LOGGER.log(Level.FINE, "Issuing request: " + getTileRequest().getFinalURL(), new RuntimeException("TRACE!"));
             }
 
             BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
             
-            getMapRequest().setCRS(gridEnvelope.getCoordinateReferenceSystem());
-            Set<Tile> responses = wmts.issueRequest(getMapRequest());
+            getTileRequest().setCRS(gridEnvelope.getCoordinateReferenceSystem());
+            Set<Tile> responses = wmts.issueRequest(getTileRequest());
             double xscale = width / requestedEnvelope.getWidth();
             double yscale = height / requestedEnvelope.getHeight();
 
@@ -346,13 +359,14 @@ public class WMTSCoverageReader extends AbstractGridCoverage2DReader {
                 System.out.println(inPoints[i]+","+inPoints[i+1]+" to "+outPoints[i]+","+outPoints[i+1]);
             }*/
             renderTile(tile, g2d, outPoints);
-       /*     //DEBUG
+            
+            // -- DEBUG !!!
             g2d.setColor(Color.RED);
             g2d.drawRect((int) outPoints[0], (int) outPoints[1], (int) Math.ceil(outPoints[2] - outPoints[0]),
                 (int) Math.ceil(outPoints[3] - outPoints[1]));
             int x = (int) outPoints[0]+(int) (Math.ceil(outPoints[2] - outPoints[0])/2);
             int y = (int) outPoints[1]+(int) (Math.ceil(outPoints[3] - outPoints[1])/2);
-            g2d.drawString(tile.getId(), x, y);*/
+            g2d.drawString(tile.getId(), x, y);
         }
 
     }
@@ -391,7 +405,7 @@ public class WMTSCoverageReader extends AbstractGridCoverage2DReader {
      * @return
      * @throws IOException
      */
-    ReferencedEnvelope initMapRequest(ReferencedEnvelope bbox, int width, int height,
+    ReferencedEnvelope initTileRequest(ReferencedEnvelope bbox, int width, int height,
             Color backgroundColor) throws IOException {
         ReferencedEnvelope gridEnvelope = bbox;
         String requestSrs = srsName;
@@ -426,18 +440,18 @@ public class WMTSCoverageReader extends AbstractGridCoverage2DReader {
             throw new IOException("Could not reproject the request envelope", e);
         }
 
-        setMapRequest(wmts.createGetTileRequest());
-        getMapRequest().setCRS(gridEnvelope.getCoordinateReferenceSystem());
-        getMapRequest().addLayer(layer, "");
-        getMapRequest().setDimensions(width, height);
-        getMapRequest().setFormat(format);
+        setTileRequest(wmts.createGetTileRequest());
+        getTileRequest().setCRS(gridEnvelope.getCoordinateReferenceSystem());
+        getTileRequest().addLayer(layer, "");
+        getTileRequest().setDimensions(width, height);
+        getTileRequest().setFormat(format);
         if (backgroundColor == null) {
-            getMapRequest().setTransparent(true);
+            getTileRequest().setTransparent(true);
         } else {
             String rgba = Integer.toHexString(backgroundColor.getRGB());
             String rgb = rgba.substring(2, rgba.length());
-            getMapRequest().setBGColour("0x" + rgb.toUpperCase());
-            getMapRequest().setTransparent(backgroundColor.getAlpha() < 255);
+            getTileRequest().setBGColour("0x" + rgb.toUpperCase());
+            getTileRequest().setTransparent(backgroundColor.getAlpha() < 255);
         }
 
         try {
@@ -447,7 +461,7 @@ public class WMTSCoverageReader extends AbstractGridCoverage2DReader {
         }
 
         ReferencedEnvelope requestEnvelope = gridEnvelope;
-        getMapRequest().setBBox(requestEnvelope);
+        getTileRequest().setBBox(requestEnvelope);
         //mapRequest.setSRS(requestSrs);
 
         
@@ -518,14 +532,14 @@ public class WMTSCoverageReader extends AbstractGridCoverage2DReader {
     /**
      * @return the mapRequest
      */
-    public GetTileRequest getMapRequest() {
+    public GetTileRequest getTileRequest() {
         return mapRequest;
     }
 
     /**
      * @param mapRequest the mapRequest to set
      */
-    public void setMapRequest(GetTileRequest mapRequest) {
+    public void setTileRequest(GetTileRequest mapRequest) {
         this.mapRequest = mapRequest;
     }
 

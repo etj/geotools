@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
+import java.util.logging.Logger;
 
 import org.geotools.data.wms.xml.Attribution;
 import org.geotools.data.wms.xml.Dimension;
@@ -37,6 +38,7 @@ import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.geotools.referencing.CRS;
 import org.geotools.referencing.crs.DefaultGeographicCRS;
 import org.geotools.referencing.crs.DefaultProjectedCRS;
+import org.geotools.util.logging.Logging;
 import org.opengis.geometry.Envelope;
 import org.opengis.geometry.MismatchedDimensionException;
 import org.opengis.referencing.FactoryException;
@@ -57,6 +59,9 @@ import org.opengis.referencing.operation.TransformException;
  *         /geotools/data/ows/Layer.java $
  */
 public class Layer implements Comparable<Layer> {
+
+    private static final Logger LOGGER = Logging.getLogger(Layer.class);
+
     /** A machine-readable (typically one word) identifier */
     private String name;
 
@@ -813,7 +818,7 @@ public class Layer implements Comparable<Layer> {
      * @param crs
      * @return GeneralEnvelope matching the provided crs; or null if unavailable.
      */
-    public GeneralEnvelope getEnvelope(CoordinateReferenceSystem crs) {
+    public  GeneralEnvelope getEnvelope(CoordinateReferenceSystem crs) {
         if( crs == null ){
             return null;
         }
@@ -858,6 +863,7 @@ public class Layer implements Comparable<Layer> {
                 env = new GeneralEnvelope(new double[] { tempBBox.getMinX(),tempBBox.getMinY() },
                         new double[] { tempBBox.getMaxX(), tempBBox.getMaxY() });
                 env.setCoordinateReferenceSystem(crs);
+                LOGGER.warning("Forcing bbox as " + env);
             }
             // success!!
             envelopeCache.put(crs, env);

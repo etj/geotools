@@ -26,6 +26,9 @@ import org.w3c.dom.NodeList;
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.GeometryFactory;
 import com.vividsolutions.jts.geom.Point;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import org.opengis.referencing.FactoryException;
 
 public class TileMatrix {
     static private final GeometryFactory gf = new GeometryFactory();
@@ -48,7 +51,7 @@ public class TileMatrix {
 
     int matrixHeight;
     
-    private CoordinateReferenceSystem crs;
+    private TileMatrixSet parent;
     /**
      * @return the identifier
      */
@@ -188,7 +191,8 @@ public class TileMatrix {
 
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append(getIdentifier()).append("\t").append(getDenominator()).append("\t")
+        sb.append(getIdentifier()).append("\t")
+                .append(getDenominator()).append("\t")
                 .append(getResolution()).append("\t");
         sb.append(getTopLeft()).append("\t");
         sb.append(getTileWidth()).append("x").append(getTileHeight()).append("\n");
@@ -200,35 +204,47 @@ public class TileMatrix {
      * @param doubleValue2
      */
     public void setTopLeft(double lon, double lat) {
-        if(crs!=null) {
-            if (isGeotoolsLongitudeFirstAxisOrderForced()
-                    || crs.getCoordinateSystem().getAxis(0).getDirection().equals(AxisDirection.EAST)) {
-                topLeft = gf.createPoint(new Coordinate(lon,lat));
-            } else {
-                topLeft = gf.createPoint(new Coordinate(lat,lon));
-            }
+        boolean isLongitudeFirstAxisOrderForced = Boolean.getBoolean(GeoTools.FORCE_LONGITUDE_FIRST_AXIS_ORDER) ||
+                GeoTools.getDefaultHints().get(Hints.FORCE_LONGITUDE_FIRST_AXIS_ORDER) == Boolean.TRUE;
+
+        CoordinateReferenceSystem crs = getCrs();
+        if (isLongitudeFirstAxisOrderForced
+                || (crs != null && crs.getCoordinateSystem().getAxis(0).getDirection().equals(AxisDirection.EAST))) {
+            topLeft = gf.createPoint(new Coordinate(lon,lat));
             return;
         }
         //guess lat/lon?
         topLeft = gf.createPoint(new Coordinate(lat,lon));
     }
 
-    /**
-     * @return the crs
-     */
-    public CoordinateReferenceSystem getCrs() {
-        return crs;
+    public TileMatrixSet getParent()
+    {
+        return parent;
     }
 
-    /**
-     * @param crs the crs to set
-     */
-    public void setCrs(CoordinateReferenceSystem crs) {
-        this.crs = crs;
+    public void setParent(TileMatrixSet parent)
+    {
+        this.parent = parent;
     }
-    
-    protected static boolean isGeotoolsLongitudeFirstAxisOrderForced() {
-        return Boolean.getBoolean(GeoTools.FORCE_LONGITUDE_FIRST_AXIS_ORDER) ||
-                GeoTools.getDefaultHints().get(Hints.FORCE_LONGITUDE_FIRST_AXIS_ORDER) == Boolean.TRUE;
+
+    private CoordinateReferenceSystem parsedCrs = null;
+    private boolean isCrsParsed = false;
+    /**
+     * Retrieve the CRS from the parent TileMatrixSet
+     */
+    public CoordinateReferenceSystem getCrs() {
+        if(isCrsParsed) {
+            return parsedCrs;
+        }
+        if(parent != null) {
+            try {
+                parsedCrs = parent.getCoordinateReferenceSystem();
+            } catch (FactoryException e) {
+                Logger.getLogger(this.getClass().getName()).log(Level.INFO, "Can't parse CRS: " + e.getMessage(), e);
+            }
+            isCrsParsed = true; // mark it as parsed even if error occurred
+        }
+
+        return parsedCrs;
     }
 }

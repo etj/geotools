@@ -120,7 +120,12 @@ public class LayerTypeBinding extends AbstractComplexBinding {
         for (Node c : children) {
             layer.getBoundingBox().add(c.getValue());
         }
-        layer.getWGS84BoundingBox().add(node.getChildValue("WGS84BoundingBox"));
+
+        children = node.getChildren("WGS84BoundingBox");
+        for (Node c : children) {
+            layer.getWGS84BoundingBox().add(c.getValue());
+        }
+        //layer.getWGS84BoundingBox().add(node.getChildValue("WGS84BoundingBox"));
         layer.getDatasetDescriptionSummary()
                 .addAll(node.getChildren(DatasetDescriptionSummaryBaseType.class));
         layer.getDimension().addAll(node.getChildren(DimensionType.class));

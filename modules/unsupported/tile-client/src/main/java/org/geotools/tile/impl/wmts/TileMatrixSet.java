@@ -115,16 +115,11 @@ public class TileMatrixSet {
         ret.setCRS(crs.item(0).getTextContent());
         NodeList id = e.getElementsByTagNameNS(OWS, "Identifier");
         ret.setIdentifier(id.item(0).getTextContent());
-        NodeList matices = e.getElementsByTagName("TileMatrix");
+        NodeList matrices = e.getElementsByTagName("TileMatrix");
 
-        for (int i = 0; i < matices.getLength(); i++) {
-            TileMatrix tm = TileMatrix.parse((Element) matices.item(i));
-            try {
-                tm.setCrs(ret.getCoordinateReferenceSystem());
-            } catch (FactoryException e1) {
-                // TODO Auto-generated catch block
-                e1.printStackTrace();
-            }
+        for (int i = 0; i < matrices.getLength(); i++) {
+            TileMatrix tm = TileMatrix.parse((Element) matrices.item(i));
+            tm.setParent(ret);
             ret.addMatrix(tm);
         }
 

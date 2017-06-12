@@ -111,8 +111,9 @@ public abstract class TileService {
     /**
      * The CRS that is used when the extent is cut in tiles.
      *
-     * @return
+     * @deprecated is it really meaningful?
      */
+    @Deprecated
     public CoordinateReferenceSystem getTileCrs() {
         return DefaultGeographicCRS.WGS84;
     }

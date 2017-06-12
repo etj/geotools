@@ -165,6 +165,8 @@ public abstract class AbstractGetTileRequest extends AbstractGetMapRequest
             throw new ServiceException("GetTiles called with no layer set");
         }
 
+        LOGGER.warning("===== getTiles    layer:" + layer );
+
         String layerString = "";
         String styleString = "";
 
@@ -188,6 +190,8 @@ public abstract class AbstractGetTileRequest extends AbstractGetMapRequest
         if (width == null || width.isEmpty() || height == null || height.isEmpty()) {
             throw new ServiceException("Can't request TILES without width and height being set");
         }
+
+        LOGGER.warning("===== getTiles    layer:" + layer + " w:" + width + " x h:"+height);
 
         int w = Integer.parseInt(width);
         int h = Integer.parseInt(height);

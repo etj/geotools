@@ -53,6 +53,7 @@ import com.vividsolutions.jts.geom.GeometryFactory;
 import net.opengis.ows11.WGS84BoundingBoxType;
 import net.opengis.ows11.AllowedValuesType;
 import net.opengis.ows11.BoundingBoxType;
+import net.opengis.ows11.CodeType;
 import net.opengis.ows11.DCPType;
 import net.opengis.ows11.DomainType;
 import net.opengis.ows11.LanguageStringType;
@@ -61,6 +62,7 @@ import net.opengis.ows11.RequestMethodType;
 import net.opengis.ows11.ValueType;
 import net.opengis.wmts.v_1.CapabilitiesType;
 import net.opengis.wmts.v_1.ContentsType;
+import net.opengis.wmts.v_1.DimensionType;
 import net.opengis.wmts.v_1.LayerType;
 import net.opengis.wmts.v_1.TileMatrixLimitsType;
 import net.opengis.wmts.v_1.TileMatrixSetLimitsType;
@@ -68,6 +70,8 @@ import net.opengis.wmts.v_1.TileMatrixSetLinkType;
 import net.opengis.wmts.v_1.TileMatrixSetType;
 import net.opengis.wmts.v_1.TileMatrixType;
 import net.opengis.wmts.v_1.URLTemplateType;
+import org.geotools.data.wms.xml.Dimension;
+import org.geotools.data.wms.xml.Extent;
 
 /**
  * Represents a base object for a WMTS getCapabilities response.
@@ -122,7 +126,7 @@ public class WMTSCapabilities extends Capabilities {
             if (l instanceof LayerType) {
                 LayerType layerType = (LayerType) l;
 
-                String title = (String) ((LanguageStringType) layerType.getTitle().get(0))
+                String title = ((LanguageStringType) layerType.getTitle().get(0))
                         .getValue().toString();
 
                 WMTSLayer layer = new WMTSLayer(title);
@@ -172,11 +176,11 @@ public class WMTSCapabilities extends Capabilities {
                     if (CRS.getAxisOrder(CRS84).equals(AxisDirection.NORTH_EAST)) {
                         x = 1;
                         y = 0;
-                        LOGGER.info("exporting bbox " + wgsBBox + "\n as lat/lon");
+//                        LOGGER.info("exporting bbox " + wgsBBox + "\n as lat/lon");
                     } else {
                         x = 0;
                         y = 1;
-                        LOGGER.info("exporting bbox " + wgsBBox + "\n as lon/lat");
+//                        LOGGER.info("exporting bbox " + wgsBBox + "\n as lon/lat");
                     }
                     boundingBoxes.put("CRS:84",
                             new CRSEnvelope("CRS:84",
@@ -199,8 +203,25 @@ public class WMTSCapabilities extends Capabilities {
 
                         layer.putResourceURL(format, template);
                     }
-
                 }
+
+//                EList<DimensionType> dimensionList = layerType.getDimension();
+//                if (dimensionList != null && !dimensionList.isEmpty()) {
+//                    for (DimensionType dimensionType : dimensionList) {
+//                        CodeType identifierType = dimensionType.getIdentifier();
+//                        String dimIdentifier = identifierType.getValue();
+//                        String dimDefault = dimensionType.getDefault();
+//
+//                        String dimSymb = dimensionType.getUnitSymbol();
+//                        String dimUom = dimensionType.getUOM().getValue();
+//                        // TODO: store all possibile values
+//
+//                        Dimension d = new Dimension(dimIdentifier, dimUom, dimSymb);
+//                        Extent e = new Extent(dimIdentifier, dimDefault, false, false, dimDefault);
+//                        d.setExtent(e);
+//                        layer.setDimensions(d);
+//                    }
+//                }
 
                 layers.add(layer);
                 layerMap.put(layer.getName(), layer);
@@ -220,13 +241,9 @@ public class WMTSCapabilities extends Capabilities {
                 matrix.setMatrixWidth(mat.getMatrixWidth().intValue());
                 matrix.setTileHeight(mat.getTileHeight().intValue());
                 matrix.setTileWidth(mat.getTileWidth().intValue());
-                try {
-                    CoordinateReferenceSystem coordinateReferenceSystem = matrixSet
-                            .getCoordinateReferenceSystem();
-                    matrix.setCrs(coordinateReferenceSystem);
-                } catch (FactoryException e) {
-
-                    throw new RuntimeException("unable to create CRS", e);
+                matrix.setParent(matrixSet);
+                if(matrix.getCrs() == null) {
+                    throw new RuntimeException("unable to create CRS " + matrixSet.getCrs());
                 }
                 List<Double> c = mat.getTopLeftCorner();
 
@@ -261,14 +278,21 @@ public class WMTSCapabilities extends Capabilities {
             wmtsLayer.getBoundingBoxes().put("EPSG:4326", new CRSEnvelope(wgs84Env));
             for (TileMatrixSetLink tms : tileMatrixLinks.values()) {
                 CoordinateReferenceSystem tmsCRS = names.get(tms.getIdentifier());
-                wmtsLayer.setPreferredCRS(tmsCRS);
+                wmtsLayer.setPreferredCRS(tmsCRS); // the preferred crs is just an arbitrary one?
                 // add bboxes
                 try {
                     // make safe to CRS bounds
-                    ReferencedEnvelope safeEnv = wgs84Env.intersection(
-                            org.geotools.tile.impl.wmts.WMTSService.getAcceptableExtent(tmsCRS));
-                    wmtsLayer.getBoundingBoxes().put(tmsCRS.getName().getCode(),
-                            new CRSEnvelope(safeEnv.transform(tmsCRS, true)));
+//                    ReferencedEnvelope safeEnv = wgs84Env.intersection(
+//                            org.geotools.tile.impl.wmts.WMTSService.getAcceptableExtent(tmsCRS));
+//                    wmtsLayer.getBoundingBoxes().put(tmsCRS.getName().getCode(),
+//                            new CRSEnvelope(safeEnv.transform(tmsCRS, true)));
+
+                    // making bbox safe may restrict it too much: let's trust in the declaration
+                    wmtsLayer.getBoundingBoxes().put(
+                            tmsCRS.getName().getCode(),
+                            new CRSEnvelope(wgs84Env.transform(tmsCRS, true)));
+
+
                     wmtsLayer.addSRS(tmsCRS);
                 } catch (TransformException | FactoryException e) {
                     // TODO Auto-generated catch block

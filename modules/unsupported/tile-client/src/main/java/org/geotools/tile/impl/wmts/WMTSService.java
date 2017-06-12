@@ -59,21 +59,26 @@ import org.xml.sax.SAXException;
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Envelope;
 import java.io.File;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.geotools.util.logging.Logging;
 
 /**
- * A tile service for WMTS servers. This is tied to a single layer and style.
+ * A tile service for WMTS servers. This is tied to a single layer, style and matrixset.
  * 
  * @author ian
  *
  */
 public class WMTSService extends TileService {
-    private static final TileFactory tileFactory = new WMTSTileFactory();
+
+    protected static final Logger LOGGER = Logging.getLogger(WMTSService.class.getPackage().getName());
 
     private static final String OWS = "http://www.opengis.net/ows/1.1";
+    private static final String XLINK = "http://www.w3.org/1999/xlink";
 
-    private static final String xlink = "http://www.w3.org/1999/xlink";
+    private static final TileFactory tileFactory = new WMTSTileFactory();
 
     private String tileMatrixSetName = "";
 
@@ -97,8 +102,10 @@ public class WMTSService extends TileService {
 
     private File cachedGetCapabilities = null;
 
+    private Map<String, Object> extrainfo = new HashMap<>();
+
     /**
-     * This is only used for test purposes!
+     * This constructor is only used for test purposes!
      * 
      * @param name - a name to refer to the layer by.
      * @param baseURL - the templated ResourceURL from the getcapabilities document.
@@ -115,6 +122,10 @@ public class WMTSService extends TileService {
         this.cachedGetCapabilities = getcapa;
 
         setTileMatrixSetName(tileMatrixSetName); // also load matrixSet
+
+        Map<String,String> headers = new HashMap<>();
+        headers.put("Referer", "http://agrigis.ch");
+        extrainfo.put("HEADERS", headers);
     }
 
     /**
@@ -136,39 +147,84 @@ public class WMTSService extends TileService {
         setType(type);
         setMatrixSet(tileMatrixSet);
         setTileMatrixSetName(tileMatrixSet.getIdentifier());
+
+        Map<String,String> headers = new HashMap<>();
+        headers.put("Referer", "https://agrigis.ch/");
+        extrainfo.put("HEADERS", headers);
     }
 
     @Override
     public Set<Tile> findTilesInExtent(ReferencedEnvelope _mapExtent, int scaleFactor,
             boolean recommendedZoomLevel, int maxNumberOfTiles) {
+
         Set<Tile> ret = Collections.emptySet();
-        //System.out.println("request bbox :"+_mapExtent+" "+_mapExtent.getCoordinateReferenceSystem().getCoordinateSystem().getAxis(0).getDirection());
-        ReferencedEnvelope extent = createSafeEnvelopeInTileCRS( _mapExtent ) ;
-        //System.out.println("fixed bbox :"+extent+" "+extent.getCoordinateReferenceSystem().getCoordinateSystem().getAxis(0).getDirection());
+
+        System.out.println("orig request bbox :"+_mapExtent
+                +" "+_mapExtent.getCoordinateReferenceSystem().getCoordinateSystem().getAxis(0).getDirection()
+                +" ("+_mapExtent.getCoordinateReferenceSystem().getName()+ ")");
+//        ReferencedEnvelope reqExtentInTileCrs = createSafeEnvelopeInTileCRS( _mapExtent ) ;
+        ReferencedEnvelope reqExtentInTileCrs;
+        CoordinateReferenceSystem tileCrs;
+        try { // TODO: the matrixset should provide an already decoded CRS
+            tileCrs = this.matrixSet.getCoordinateReferenceSystem();
+        } catch (FactoryException ex) {
+            LOGGER.log(Level.WARNING, "Tile CRS can't be decoded");
+            return ret;
+        }
+        if(!CRS.equalsIgnoreMetadata(
+                    tileCrs,
+                    _mapExtent.getCoordinateReferenceSystem())) {
+            try {
+                reqExtentInTileCrs = _mapExtent.transform(tileCrs, true);
+            } catch (TransformException | FactoryException ex) {
+                LOGGER.log(Level.WARNING, "Requested extent can't be projected to tile CRS ("
+                        +_mapExtent.getCoordinateReferenceSystem().getCoordinateSystem().getName()
+                        +" -> " + tileCrs.getCoordinateSystem().getName() +") :" + ex.getMessage());
+                return ret;
+            }
+        } else {
+            reqExtentInTileCrs = _mapExtent;
+        }
+        
+        if(reqExtentInTileCrs == null) {
+            LOGGER.log(Level.FINE, "Requested extent not in tile CRS range");
+            return ret;
+        }
+
+        System.out.println("tile crs req bbox :"+reqExtentInTileCrs+
+                " "+reqExtentInTileCrs.getCoordinateReferenceSystem().getCoordinateSystem().getAxis(0).getDirection()
+                +" ("+reqExtentInTileCrs.getCoordinateReferenceSystem().getName()+ ")");
         
         ReferencedEnvelope coverageEnvelope = getBounds();
-        //System.out.println("coverage bbox :"+coverageEnvelope+" "+coverageEnvelope.getCoordinateReferenceSystem().getCoordinateSystem().getAxis(0).getDirection());
-        boolean sameCRS = CRS.equalsIgnoreMetadata(coverageEnvelope.getCoordinateReferenceSystem(),
-                extent.getCoordinateReferenceSystem());
+        System.out.println("coverage bbox :"+coverageEnvelope
+                +" "+coverageEnvelope.getCoordinateReferenceSystem().getCoordinateSystem().getAxis(0).getDirection()
+                +" ("+coverageEnvelope.getCoordinateReferenceSystem().getName()+ ")");
+
+        ReferencedEnvelope requestEnvelopeWGS84;
+
+        boolean sameCRS = CRS.equalsIgnoreMetadata(
+                coverageEnvelope.getCoordinateReferenceSystem(),
+                reqExtentInTileCrs.getCoordinateReferenceSystem());
         if (sameCRS) {
-            if (!coverageEnvelope.intersects((BoundingBox) extent)) {
-                
+            if (!coverageEnvelope.intersects((BoundingBox) reqExtentInTileCrs)) {
+                LOGGER.log(Level.FINE, "Extents do not intersect (sameCRS))");
                 return ret;
             }
         } else {
             ReferencedEnvelope dataEnvelopeWGS84;
-            ReferencedEnvelope requestEnvelopeWGS84;
             try {
                 dataEnvelopeWGS84 = coverageEnvelope.transform(DefaultGeographicCRS.WGS84, true);
 
-                requestEnvelopeWGS84 = extent.transform(DefaultGeographicCRS.WGS84, true);
+                requestEnvelopeWGS84 = reqExtentInTileCrs.transform(DefaultGeographicCRS.WGS84, true);
 
                 if (!dataEnvelopeWGS84.intersects((BoundingBox) requestEnvelopeWGS84)) {
+                    LOGGER.log(Level.FINE, "Extents do not intersect");
                     return ret;
                 }
             } catch (TransformException | FactoryException e) {
                 // TODO Auto-generated catch block
                 e.printStackTrace();
+                throw new RuntimeException(e);
             }
         }
       
@@ -177,12 +233,13 @@ public class WMTSService extends TileService {
         ScaleZoomLevelMatcher zoomLevelMatcher = null;
         try {
 
-            zoomLevelMatcher = new ScaleZoomLevelMatcher(getTileCrs(), getProjectedTileCrs(),
-                    CRS.findMathTransform(getTileCrs(), getProjectedTileCrs()),
-                    CRS.findMathTransform(getProjectedTileCrs(), getTileCrs()), _mapExtent,
-                    _mapExtent, scaleFactor);
+//            zoomLevelMatcher = new ScaleZoomLevelMatcher(getTileCrs(), getProjectedTileCrs(),
+//                    CRS.findMathTransform(getTileCrs(), getProjectedTileCrs()),
+//                    CRS.findMathTransform(getProjectedTileCrs(), getTileCrs()), _mapExtent,
+//                    _mapExtent, scaleFactor);
+            zoomLevelMatcher = ScaleZoomLevelMatcher.createMatcher(reqExtentInTileCrs, matrixSet, scaleFactor);
 
-        } catch (FactoryException e) {
+        } catch (FactoryException|TransformException e) {
             throw new RuntimeException(e);
         }
 
@@ -190,21 +247,27 @@ public class WMTSService extends TileService {
         ZoomLevel zoomLevel = tileFactory.getZoomLevel(zl, this);
         long maxNumberOfTilesForZoomLevel = zoomLevel.getMaxTileNumber();
 
+        if(LOGGER.isLoggable(Level.FINE)) {
+            LOGGER.log(Level.FINE, "Zoom level:" + zl
+                    + "[" + zoomLevel.getMaxTilePerColNumber()+ " x " + zoomLevel.getMaxTilePerRowNumber() +"]");
+        }
+
         // Map<String, Tile> tileList = new HashMap<String, Tile>();
-        Set<Tile> tileList = new HashSet<Tile>(
+        Set<Tile> tileList = new HashSet<>(
                 (int) Math.min(maxNumberOfTiles, maxNumberOfTilesForZoomLevel));
         Tile firstTile;
         // Let's get the first tile which covers the upper-left corner
         if (/*TileMatrix.isGeotoolsLongitudeFirstAxisOrderForced()
-                || */extent.getCoordinateReferenceSystem().getCoordinateSystem().getAxis(0)
+                || */reqExtentInTileCrs.getCoordinateReferenceSystem().getCoordinateSystem().getAxis(0)
                         .getDirection().equals(AxisDirection.EAST)) {
-            firstTile = tileFactory.findTileAtCoordinate(extent.getMinX(), extent.getMaxY(),
-                    zoomLevel, this);
+            firstTile = tileFactory.findTileAtCoordinate(reqExtentInTileCrs.getMinX(), reqExtentInTileCrs.getMaxY(), zoomLevel, this);
         } else {
-            firstTile = tileFactory.findTileAtCoordinate(extent.getMinY(), extent.getMaxX(),
-                    zoomLevel, this);
+            LOGGER.log(Level.FINE, "Inverted tile coords!");
+            firstTile = tileFactory.findTileAtCoordinate(reqExtentInTileCrs.getMinY(), reqExtentInTileCrs.getMaxX(), zoomLevel, this);
         }
 
+        LOGGER.log(Level.FINE, "Adding first tile " + firstTile.getId() + " " + firstTile.getExtent()
+                + " ("+firstTile.getExtent().getCoordinateReferenceSystem().getName()+")");
         addTileToCache(firstTile);
         tileList.add(firstTile);
 
@@ -222,21 +285,25 @@ public class WMTSService extends TileService {
 
                 // Check if the new tile is still part of the extent and
                 // that we don't have the first tile again
-                boolean intersects = extent.intersects((Envelope) rightNeighbour.getExtent());
+//                boolean intersects = extent.intersects((Envelope) rightNeighbour.getExtent());
+                boolean intersects = reqExtentInTileCrs.intersects((Envelope) rightNeighbour.getExtent());
+                LOGGER.log(Level.FINE, "Intersect (" + rightNeighbour.getId()+" , "+  rightNeighbour.getExtent()+") --> " + intersects);
                 if (intersects && !firstTileOfRow.equals(rightNeighbour)) {
+                    LOGGER.log(Level.FINE, "Adding right neighbour " + rightNeighbour.getId());
 
                     addTileToCache(rightNeighbour);
                     tileList.add(rightNeighbour);
 
                     movingTile = rightNeighbour;
                 } else {
+                    LOGGER.log(Level.FINE, "Stopping on right neighbour " + rightNeighbour.getId());
 
                     break;
                 }
                 if (tileList.size() > maxNumberOfTiles) {
                     LOGGER.warning("Reached tile limit of " + maxNumberOfTiles
-                            + ". Returning an empty collection.");
-                    return Collections.emptySet();
+                            + ". Returning the tiles collected so far.");
+                    return tileList;
                 }
             } while (tileList.size() < maxNumberOfTilesForZoomLevel);
 
@@ -245,8 +312,10 @@ public class WMTSService extends TileService {
             Tile lowerNeighbour = tileFactory.findLowerNeighbour(firstTileOfRow, this);
 
             // Check if the new tile is still part of the extent
-            boolean intersects = extent.intersects((Envelope) lowerNeighbour.getExtent());
+            boolean intersects = reqExtentInTileCrs.intersects((Envelope) lowerNeighbour.getExtent());
+                LOGGER.log(Level.FINE, "Intersect (" + lowerNeighbour.getId()+") --> " + intersects);
             if (intersects && !firstTile.equals(lowerNeighbour)) {
+                LOGGER.log(Level.FINE, "Adding lower neighbour " + lowerNeighbour.getId());
 
                 // System.out.printf("N: %s %s", lowerNeighbour.getId(),
                 // addTileToList(lowerNeighbour));
@@ -256,6 +325,7 @@ public class WMTSService extends TileService {
 
                 firstTileOfRow = movingTile = lowerNeighbour;
             } else {
+                LOGGER.log(Level.FINE, "Stopping on lower neighbour " + lowerNeighbour.getId());
                 break;
             }
         } while (tileList.size() < maxNumberOfTilesForZoomLevel);
@@ -264,28 +334,32 @@ public class WMTSService extends TileService {
     }
 
     /**
-     * @param _mapExtent
+     * @param requestedExtent
      * @return
      */
-    private ReferencedEnvelope createSafeEnvelopeInTileCRS(ReferencedEnvelope _mapExtent) {
-        CoordinateReferenceSystem crs = getProjectedTileCrs();
+    private ReferencedEnvelope createSafeEnvelopeInTileCRS(ReferencedEnvelope requestedExtent) {
+
         try {
             //clip _mapExtent to the domain of availability!
-            ReferencedEnvelope extent = getAcceptableExtent(crs);
-            crs=extent.getCoordinateReferenceSystem();
-            if(!CRS.equalsIgnoreMetadata(crs, _mapExtent.getCoordinateReferenceSystem())) {
-                extent = extent.transform(_mapExtent.getCoordinateReferenceSystem(), true);
+            ReferencedEnvelope acceptableExtent = getAcceptableExtent(getProjectedTileCrs());
+            if(acceptableExtent == null) {
+                return null;
+            }
+            if(!CRS.equalsIgnoreMetadata(
+                    acceptableExtent.getCoordinateReferenceSystem(),
+                    requestedExtent.getCoordinateReferenceSystem())) {
+                acceptableExtent = acceptableExtent.transform(requestedExtent.getCoordinateReferenceSystem(), true);
             } /*else {
               return _mapExtent;  
             }*/
-            if(_mapExtent.intersects((Envelope)extent)) {
-                _mapExtent = _mapExtent.intersection(extent);
+            if(requestedExtent.intersects((Envelope)acceptableExtent)) {
+                requestedExtent = requestedExtent.intersection(acceptableExtent);
+            } else {
+                return null;
             }
-            return _mapExtent.transform(crs, true);
+            return requestedExtent.transform(getProjectedTileCrs(), true);
 
-        } catch (TransformException e) {
-            throw new RuntimeException(e);
-        } catch (FactoryException e) {
+        } catch (TransformException | FactoryException e) {
             throw new RuntimeException(e);
         }
     }
@@ -354,6 +428,16 @@ public class WMTSService extends TileService {
      */
    public static ReferencedEnvelope getAcceptableExtent(CoordinateReferenceSystem projectedTileCrs) {
         Extent extent = projectedTileCrs.getDomainOfValidity();
+
+        if(extent == null) {
+            LOGGER.warning("Null extent for CRS " + projectedTileCrs.getCoordinateSystem().getName());
+
+            if(LOGGER.isLoggable(Level.FINE)) {
+                LOGGER.log(Level.WARNING, "Null extent: trace", new RuntimeException("TRACE!"));
+            }
+            return null;
+        }
+
         Iterator<? extends GeographicExtent> itr = extent.getGeographicElements().iterator();
         while (itr.hasNext()) {
             //GeographicExtent is always long/lat!
@@ -519,7 +603,7 @@ public class WMTSService extends TileService {
                     NodeList values = element.getElementsByTagNameNS(OWS, "Get");
                     Element url = (Element) values.item(0);
 
-                    templateURL = url.getAttributeNS(xlink, "href");
+                    templateURL = url.getAttributeNS(XLINK, "href");
                 }
             }
 
@@ -752,6 +836,11 @@ public class WMTSService extends TileService {
     public WMTSZoomLevel getZoomLevel(int zoom) {
         //
         return new WMTSZoomLevel(zoom, this);
+    }
+
+    public Map<String, Object> getExtrainfo()
+    {
+        return extrainfo;
     }
 
 }

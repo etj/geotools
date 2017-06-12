@@ -24,48 +24,27 @@ import org.geotools.tile.Tile;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
 
 /**
- * Construct a WMS getMap request.
+ * Construct a WMTS getTile request.
  * 
+ * TODO: SHOULD NOT EXTEND GETMAPREQUEST
+ * DOC TODO
+ *
  * <p>
  * Constructs a getMapRequest based on the following property values:
  * 
  * <ul>
- * <li>
- * ELEVATION
- * </li>
- * <li>
- * TIME
- * </li>
- * <li>
- * EXCEPTIONS
- * </li>
- * <li>
- * BGCOLOR
- * </li>
- * <li>
- * TRANSPARENT
- * </li>
- * <li>
- * WIDTH
- * </li>
- * <li>
- * HEIGHT
- * </li>
- * <li>
- * SRS
- * </li>
- * <li>
- * REQUEST
- * </li>
- * <li>
- * LAYERS
- * </li>
- * <li>
- * STYLES
- * </li>
- * <li>
- * <i>vendor specific parameters</i>
- * </li>
+ * <li>ELEVATION</li>
+ * <li>TIME</li>
+ * <li>EXCEPTIONS</li>
+ * <li>BGCOLOR</li>
+ * <li>TRANSPARENT</li>
+ * <li>WIDTH</li>
+ * <li>HEIGHT</li>
+ * <li>SRS</li>
+ * <li>REQUEST</li>
+ * <li>LAYERS</li>
+ * <li>STYLES</li>
+ * <li><i>vendor specific parameters</i></li>
  * </ul>
  * </p>
  * 
@@ -83,18 +62,8 @@ import org.opengis.referencing.crs.CoordinateReferenceSystem;
  * @source $URL$
  */
 public interface GetTileRequest extends GetMapRequest{
-    
-    /**
-     * @return
-     * @throws ServiceException 
-     */
+
     public Set<Tile> getTiles() throws ServiceException;
 
-    /**
-     * @param coordinateReferenceSystem
-     */
     public void setCRS(CoordinateReferenceSystem coordinateReferenceSystem);
-
-   
-    
 }

@@ -36,7 +36,7 @@ import org.opengis.referencing.cs.CoordinateSystem;
 
 /**
  * Implementation of TileFactory for WMTS
- * 
+ *
  * @author ian
  *
  */
@@ -47,13 +47,13 @@ public class WMTSTileFactory extends TileFactory {
             .getLogger(WMTSTileFactory.class.getPackage().getName());
 
     /**
-     * 
+     *
      */
     public WMTSTileFactory() {
         // TODO Auto-generated constructor stub
     }
 
-    
+
     @Override
     public Tile findTileAtCoordinate(double lon, double lat, ZoomLevel zoomLevel,
             TileService service) {
@@ -72,9 +72,9 @@ public class WMTSTileFactory extends TileFactory {
             tileMatrixLimits.setMaxRow(tileMatrix.matrixHeight);
         }
 
-        
+
         double pixelSpan = getPixelSpan(tileMatrix);
-        
+
         double tileSpanY = (tileMatrix.getTileHeight() * pixelSpan);
         double tileSpanX = (tileMatrix.getTileWidth() * pixelSpan);
         double tileMatrixMinX;
@@ -102,7 +102,7 @@ public class WMTSTileFactory extends TileFactory {
         if (yTile < tileMatrixLimits.minrow)
             yTile = tileMatrixLimits.minrow;
 
-        LOGGER.fine("fetching tile: " + xTile + " " + yTile + " " + zoomLevel.getZoomLevel());
+        LOGGER.fine("findTile: (lon,lat)=("+lon+","+lat+")  (col,row)=" + xTile + ", " + yTile + " zoom:" + zoomLevel.getZoomLevel());
         return new WMTSTile((int) xTile, (int) yTile, zoomLevel, service);
     }
 
@@ -134,14 +134,14 @@ public class WMTSTileFactory extends TileFactory {
         WMTSZoomLevel zl = new WMTSZoomLevel(tileIdentifier.getZ(), (WMTSService) service);
         TileMatrix tileMatrix = ((WMTSService) service).getMatrixSet().getMatrices()
                 .get(zl.getZoomLevel());
-        
+
         CoordinateReferenceSystem crs = tileMatrix.getCrs();
         CoordinateSystem coordinateSystem = crs.getCoordinateSystem();
-        
+
         double pixelSpan = getPixelSpan(tileMatrix);
         double tileSpanY = (tileMatrix.getTileHeight() * pixelSpan);
         double tileSpanX = (tileMatrix.getTileWidth() * pixelSpan);
-       
+
         double tileMatrixMinX;
         double tileMatrixMaxY;
         boolean longFirst = coordinateSystem.getAxis(0).getDirection().equals(AxisDirection.EAST);
@@ -183,7 +183,7 @@ public class WMTSTileFactory extends TileFactory {
             unit = NonSI.NAUTICAL_MILE;
             UnitConverter metersperunit = unit.getConverterTo(SI.METER);
             pixelSpan /= metersperunit.convert(60.0);*/
-            
+
             //constant value from https://msi.nga.mil/MSISiteContent/StaticFiles/Calculators/degree.html
             //apparently - 60.10764611706782 NaMiles
             pixelSpan /= 111319;
