@@ -17,8 +17,12 @@
 package org.geotools.data.wmts.request;
 
 import java.util.Set;
+import org.geotools.data.ows.Layer;
 
-import org.geotools.data.wms.request.GetMapRequest;
+import org.geotools.data.ows.Request;
+import org.geotools.data.ows.StyleImpl;
+import org.geotools.data.wmts.WMTSLayer;
+import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.geotools.ows.ServiceException;
 import org.geotools.tile.Tile;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
@@ -61,9 +65,24 @@ import org.opengis.referencing.crs.CoordinateReferenceSystem;
  *
  * @source $URL$
  */
-public interface GetTileRequest extends GetMapRequest{
+public interface GetTileRequest extends Request{
+
+    /**
+     * Sets the version number of the request.
+     *
+     * @param version A String indicating a WMTS Version ("1.0.0", ...)
+     */
+//    public void setVersion(String version);
+
+    public void setLayer(WMTSLayer layer);
+
+    public void setStyle(String styleName);
 
     public Set<Tile> getTiles() throws ServiceException;
+
+    public void setRequestedHeight(int height);
+    public void setRequestedWidth(int width);
+    public void setRequestedBBox(ReferencedEnvelope bbox);
 
     public void setCRS(CoordinateReferenceSystem coordinateReferenceSystem);
 }

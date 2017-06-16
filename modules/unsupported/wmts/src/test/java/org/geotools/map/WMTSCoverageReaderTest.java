@@ -76,7 +76,7 @@ public class WMTSCoverageReaderTest {
         int width=400;
         int height=200;
         Color backgroundColor = Color.WHITE;
-        ReferencedEnvelope grid = wcr.initTileRequest(bbox, width, height, backgroundColor );
+        ReferencedEnvelope grid = wcr.initTileRequest(bbox, width, height);
         assertNotNull(grid);
         GetTileRequest mapRequest = wcr.getTileRequest();
         mapRequest.setCRS(grid.getCoordinateReferenceSystem());

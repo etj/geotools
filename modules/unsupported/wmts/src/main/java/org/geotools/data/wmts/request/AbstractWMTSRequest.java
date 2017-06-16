@@ -19,19 +19,20 @@ package org.geotools.data.wmts.request;
 import java.net.URL;
 import java.util.Properties;
 
-import org.geotools.data.wms.request.AbstractWMSRequest;
+import org.geotools.data.ows.AbstractRequest;
 
 /**
- * 
+ *
  *
  * @source $URL$
  */
-public abstract class AbstractWMTSRequest extends AbstractWMSRequest {
-    public AbstractWMTSRequest(URL onlineResource, Properties properties) {
-		super(onlineResource, properties);
-	}
+public abstract class AbstractWMTSRequest extends AbstractRequest {
 
-	protected void initService() {
-		setProperty(SERVICE, "WMTS");
-	}
+    public AbstractWMTSRequest(URL onlineResource, Properties properties) {
+        super(onlineResource, properties);
+    }
+
+    protected void initService() {
+        setProperty(SERVICE, "WMTS");
+    }
 }

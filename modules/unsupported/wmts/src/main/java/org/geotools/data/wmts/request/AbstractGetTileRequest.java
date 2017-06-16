@@ -30,10 +30,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.geotools.data.ows.HTTPResponse;
-import org.geotools.data.ows.Layer;
 import org.geotools.data.ows.Response;
-import org.geotools.data.ows.StyleImpl;
-import org.geotools.data.wms.request.AbstractGetMapRequest;
 import org.geotools.data.wmts.WMTSCapabilities;
 import org.geotools.data.wmts.WMTSLayer;
 import org.geotools.geometry.jts.ReferencedEnvelope;
@@ -49,11 +46,8 @@ import org.geotools.tile.impl.wmts.WMTSService;
 import org.geotools.tile.impl.wmts.WMTSServiceType;
 import org.geotools.tile.impl.wmts.WMTSTileFactory;
 import org.geotools.util.logging.Logging;
-import org.opengis.geometry.Envelope;
-import org.opengis.geometry.MismatchedDimensionException;
 import org.opengis.referencing.FactoryException;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
-import org.opengis.referencing.cs.AxisDirection;
 import org.opengis.referencing.operation.TransformException;
 
 /**
@@ -63,8 +57,9 @@ import org.opengis.referencing.operation.TransformException;
  *
  * @source $URL$
  */
-public abstract class AbstractGetTileRequest extends AbstractGetMapRequest
+public abstract class AbstractGetTileRequest extends AbstractWMTSRequest
         implements GetTileRequest {
+
     /** MAXTILES */
     private static final int MAXTILES = 256;
 
@@ -97,7 +92,9 @@ public abstract class AbstractGetTileRequest extends AbstractGetMapRequest
 
     protected WMTSCapabilities capabilities;
 
-    private ReferencedEnvelope bbox;
+    private ReferencedEnvelope requestedBBox;
+    private int requestedHeight;
+    private int requestedWidth;
 
     private CoordinateReferenceSystem crs;
 
@@ -111,6 +108,12 @@ public abstract class AbstractGetTileRequest extends AbstractGetMapRequest
         super(onlineResource, properties);
     }
 
+    protected abstract void initVersion();
+
+    protected void initRequest() {
+        setProperty(REQUEST, "GetTile");
+    }
+
     @Override
     public Response createResponse(HTTPResponse response) throws ServiceException, IOException {
         // TODO Auto-generated method stub
@@ -118,28 +121,36 @@ public abstract class AbstractGetTileRequest extends AbstractGetMapRequest
     }
 
     @Override
-    public void addLayer(Layer layer, String style) {
-        this.layer = (WMTSLayer) layer;
-        super.addLayer(layer, style);
+    public void setLayer(WMTSLayer layer) {
+        this.layer = layer;
     }
 
     @Override
-    public void addLayer(Layer layer) {
-        this.layer = (WMTSLayer) layer;
-        super.addLayer(layer);
+    public void setStyle(String styleName) {
+        this.styleName = styleName;
     }
 
-    @Override
-    public void addLayer(Layer layer, StyleImpl style) {
-        this.layer = (WMTSLayer) layer;
-        super.addLayer(layer, style);
+    public void setRequestedHeight(int height)
+    {
+        this.requestedHeight = height;
     }
 
-    @Override
-    public void setSRS(String srs) {
-        this.srs = srs;
-        super.setSRS(srs);
+    public void setRequestedWidth(int width)
+    {
+        this.requestedWidth = width;
     }
+
+    public void setRequestedBBox(ReferencedEnvelope requestedBBox)
+    {
+        this.requestedBBox = requestedBBox;
+    }
+
+
+//    @Override
+//    public void setSRS(String srs) {
+//        this.srs = srs;
+//        super.setSRS(srs);
+//    }
 
     /**
      * @return the crs
@@ -159,6 +170,7 @@ public abstract class AbstractGetTileRequest extends AbstractGetMapRequest
      * 
      * @throws ServiceException
      */
+    @Override
     public Set<Tile> getTiles() throws ServiceException {
         Set<Tile> tiles = new HashSet<>();
         if (layer == null) {
@@ -185,16 +197,16 @@ public abstract class AbstractGetTileRequest extends AbstractGetMapRequest
 
         setProperty(LAYER, layerString);
         setProperty(STYLE, styleString);
-        String width = properties.getProperty(WIDTH);
-        String height = properties.getProperty(HEIGHT);
-        if (width == null || width.isEmpty() || height == null || height.isEmpty()) {
-            throw new ServiceException("Can't request TILES without width and height being set");
-        }
+//        String width = properties.getProperty(GetMapRequest.WIDTH);
+//        String height = properties.getProperty(GetMapRequest.HEIGHT);
+//        if (width == null || width.isEmpty() || height == null || height.isEmpty()) {
+//            throw new ServiceException("Can't request TILES without width and height being set");
+//        }
 
-        LOGGER.warning("===== getTiles    layer:" + layer + " w:" + width + " x h:"+height);
+        LOGGER.warning("===== getTiles    layer:" + layer + " w:" + requestedWidth + " x h:"+requestedHeight);
 
-        int w = Integer.parseInt(width);
-        int h = Integer.parseInt(height);
+//        int w = Integer.parseInt(width);
+//        int h = Integer.parseInt(height);
         TileMatrixSet matrixSet = null;
         Map<String, TileMatrixSetLink> links = layer.getTileMatrixLinks();
         CoordinateReferenceSystem requestCRS = getCrs();
@@ -265,12 +277,12 @@ public abstract class AbstractGetTileRequest extends AbstractGetMapRequest
         int scale = 0;
 
         try {
-            scale = (int) Math.round(RendererUtilities.calculateScale(bbox, w, h, DPI));
+            scale = (int) Math.round(RendererUtilities.calculateScale(requestedBBox, requestedWidth, requestedHeight, DPI));
         } catch (FactoryException | TransformException ex) {
             throw new RuntimeException("Failed to calculate scale", ex);
         }
-        tiles = ((WMTSService) wmtsService).findTilesInExtent(bbox, scale, false, MAXTILES);
-        LOGGER.fine("found " + tiles.size() + " tiles in " + bbox);
+        tiles = ((WMTSService) wmtsService).findTilesInExtent(requestedBBox, scale, false, MAXTILES);
+        LOGGER.fine("found " + tiles.size() + " tiles in " + requestedBBox);
         if (tiles.isEmpty()) {
             return tiles;
         }
@@ -315,27 +327,22 @@ public abstract class AbstractGetTileRequest extends AbstractGetMapRequest
 
     }
 
-    protected abstract void initVersion();
 
-    protected void initRequest() {
-        setProperty(REQUEST, "GetTile");
-    }
-
-    @Override
-    public void setBBox(Envelope envelope) {
-        if (srs != null && !srs.isEmpty()) {
-            try {
-                this.bbox = new ReferencedEnvelope(CRS.decode(srs));
-            } catch (MismatchedDimensionException | FactoryException e) {
-                LOGGER.log(Level.FINER, e.getMessage(), e);
-                this.bbox = new ReferencedEnvelope();
-            }
-            this.bbox.expandToInclude(envelope.getUpperCorner());
-            this.bbox.expandToInclude(envelope.getLowerCorner());
-        } else {
-            this.bbox = new ReferencedEnvelope(envelope);
-        }
-    }
+    //@Override
+//    public void setBBox(Envelope envelope) {
+//        if (srs != null && !srs.isEmpty()) {
+//            try {
+//                this.requestedBBox = new ReferencedEnvelope(CRS.decode(srs));
+//            } catch (MismatchedDimensionException | FactoryException e) {
+//                LOGGER.log(Level.FINER, e.getMessage(), e);
+//                this.requestedBBox = new ReferencedEnvelope();
+//            }
+//            this.requestedBBox.expandToInclude(envelope.getUpperCorner());
+//            this.requestedBBox.expandToInclude(envelope.getLowerCorner());
+//        } else {
+//            this.requestedBBox = new ReferencedEnvelope(envelope);
+//        }
+//    }
 
     /**
      * From the Web Map Service Implementation Specification: "The required BBOX parameter allows a Client to request a particular Bounding Box. The
@@ -347,21 +354,21 @@ public abstract class AbstractGetTileRequest extends AbstractGetMapRequest
      * 
      * @param bbox A string representing a bounding box in the format "minx,miny,maxx,maxy"
      */
-    public void setBBox(String bbox) {
-        String[] c = bbox.split(",");
-        double x1 = Double.parseDouble(c[0]);
-        double x2 = Double.parseDouble(c[2]);
-        double y1 = Double.parseDouble(c[1]);
-        double y2 = Double.parseDouble(c[3]);
-
-        CoordinateReferenceSystem crs = toServerCRS(srs, false);
-        if (isGeotoolsLongitudeFirstAxisOrderForced()
-                || crs.getCoordinateSystem().getAxis(0).getDirection().equals(AxisDirection.EAST)) {
-            this.bbox = new ReferencedEnvelope(x1, x2, y1, y2, crs);
-        } else {
-            this.bbox = new ReferencedEnvelope(y1, y2, x1, x2, crs);
-        }
-
-    }
+//    public void setBBox(String bbox) {
+//        String[] c = bbox.split(",");
+//        double x1 = Double.parseDouble(c[0]);
+//        double x2 = Double.parseDouble(c[2]);
+//        double y1 = Double.parseDouble(c[1]);
+//        double y2 = Double.parseDouble(c[3]);
+//
+//        CoordinateReferenceSystem crs = toServerCRS(srs, false);
+//        if (isGeotoolsLongitudeFirstAxisOrderForced()
+//                || crs.getCoordinateSystem().getAxis(0).getDirection().equals(AxisDirection.EAST)) {
+//            this.requestedBBox = new ReferencedEnvelope(x1, x2, y1, y2, crs);
+//        } else {
+//            this.requestedBBox = new ReferencedEnvelope(y1, y2, x1, x2, crs);
+//        }
+//
+//    }
 
 }

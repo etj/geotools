@@ -41,7 +41,7 @@ public class WMTSSpecification extends Specification {
     private WMTSServiceType type;
 
     /**
-     * 
+     *
      */
     public WMTSSpecification() {
         // TODO Auto-generated constructor stub
@@ -49,7 +49,7 @@ public class WMTSSpecification extends Specification {
 
     @Override
     public String getVersion() {
-        // 
+        //
         return WMTS_VERSION;
     }
 
@@ -58,19 +58,18 @@ public class WMTSSpecification extends Specification {
         // TODO Auto-generated method stub
         return new GetCapsRequest(server);
     }
-    
+
     public GetTileRequest createGetTileRequest(URL server, Properties props, WMTSCapabilities caps) {
         return new GetTileRequest(server, props, caps);
-        
+
     }
-    
+
     static public class GetTileRequest extends AbstractGetTileRequest{
-        
-        
+
         /**
          * @param onlineResource
          * @param properties
-         * @param type 
+         * @param type
          */
         public GetTileRequest(URL onlineResource, Properties properties, WMTSCapabilities capabilities) {
             super(onlineResource, properties);
@@ -87,10 +86,6 @@ public class WMTSSpecification extends Specification {
         @Override
         protected void initVersion() {
             setProperty(VERSION, WMTS_VERSION);
-            
-        }
-        protected void initRequest() {
-            setProperty(REQUEST, "GetTile"); //$NON-NLS-1$ //$NON-NLS-2$
         }
 
         /**
@@ -107,38 +102,34 @@ public class WMTSSpecification extends Specification {
             this.type = type;
         }
 
-       
     }
-    
+
     static public class GetCapsRequest extends AbstractGetCapabilitiesRequest {
         /**
          * Construct a Request compatible with a 1.0.1 WMTS.
-         * 
+         *
          * @param urlGetCapabilities URL of GetCapabilities document.
          */
         public GetCapsRequest( URL urlGetCapabilities ) {
             super(urlGetCapabilities);
         }
 
-        protected void initVersion() {
-            setProperty(VERSION, WMTS_VERSION); //$NON-NLS-1$ //$NON-NLS-2$
-            
-        }
-
-        protected void initRequest() {
-            setProperty(REQUEST, "GetCapabilities"); //$NON-NLS-1$ //$NON-NLS-2$
-        }
-
+        @Override
         protected void initService() {
             setProperty(SERVICE , "WMTS");
         }
-        /*
-         * @see org.geotools.data.wms.request.AbstractRequest#processKey(java.lang.String)
-         */
+
+        @Override
+        protected void initVersion() {
+            setProperty(VERSION, WMTS_VERSION); //$NON-NLS-1$ //$NON-NLS-2$
+        }
+
+        @Override
         protected String processKey( String key ) {
             return WMTSSpecification.processKey(key);
         }
-        
+
+        @Override
         public Response createResponse(HTTPResponse httpResponse) throws ServiceException,
                 IOException {
             return new WMTSGetCapabilitiesResponse(httpResponse, hints);
@@ -150,9 +141,9 @@ public class WMTSSpecification extends Specification {
      * @return
      */
     public static String processKey(String key) {
-        
+
         return key.trim().toUpperCase();
     }
 
-   
+
 }
