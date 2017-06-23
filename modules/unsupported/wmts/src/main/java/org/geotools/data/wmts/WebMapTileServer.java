@@ -128,25 +128,13 @@ public class WebMapTileServer extends AbstractOpenWebService<WMTSCapabilities, L
 
     }
 
-    private URL findURL(OperationType operation) {
-        if (WMTSServiceType.KVP.equals(type)) {
-            if (operation.getGet() != null) {
-                return operation.getGet();
-            }
-            return serverURL;
-
-        } else {
-            return null;
-        }
-    }
-
     /**
-     * @param mapRequest
+     * @param tileRequest
      * @return
      */
-    public Set<Tile> issueRequest(GetTileRequest mapRequest) throws ServiceException {
+    public Set<Tile> issueRequest(GetTileRequest tileRequest) throws ServiceException {
         
-        return mapRequest.getTiles();
+        return tileRequest.getTiles();
     }
 
     /**
@@ -161,6 +149,18 @@ public class WebMapTileServer extends AbstractOpenWebService<WMTSCapabilities, L
         } else {
             return (GetTileRequest) ((WMTSSpecification) specification)
                     .createGetTileRequest(serverURL, (Properties) null, capabilities);
+        }
+    }
+
+    private URL findURL(OperationType operation) {
+        if (WMTSServiceType.KVP.equals(type)) {
+            if (operation.getGet() != null) {
+                return operation.getGet();
+            }
+            return serverURL;
+
+        } else {
+            return null;
         }
     }
 

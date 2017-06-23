@@ -50,8 +50,8 @@ public class WMTSTile extends Tile {
     public static final int DEFAULT_TILE_SIZE = 256;
 
     /**
-     * Many WMTS tiles may be reloaded over and over, especially in a tiles getMap request.
-     * The size should be made configurable
+     * Many WMTS tiles may be reloaded over and over, especially in a tiled getMap request.
+     * TODO: The size should be made configurable
      **/
     private static ObjectCache tileImages = ObjectCaches.create("soft", 150);
 
@@ -98,56 +98,81 @@ public class WMTSTile extends Tile {
         String baseUrl = new String(service.getTemplateURL());
 
         TileIdentifier tileIdentifier = getTileIdentifier();
-        if (WMTSServiceType.KVP.equals(type)) {
-            //in theory it should end with ? but there may be other params that the server needs out of spec
-            if(!baseUrl.contains("?")) {
+        if (null == type) {
+            throw new IllegalArgumentException("Unexpected WMTS Service type " + type);
+        } else switch (type) {
+            case KVP:
+                return getKVPurl(baseUrl, tileIdentifier);
+            case REST:
+                return getRESTurl(baseUrl, tileIdentifier);
+            default:
+                throw new IllegalArgumentException("Unexpected WMTS Service type " + type);
+        }
+    }
 
-                baseUrl+="?";
-            }
-            HashMap<String, Object> params = new HashMap<>();
-            params.put("service", "WMTS");
-            params.put("version", "1.0.0");
-            params.put("request", "getTile");
-            params.put("layer",service.getLayerName());
-            params.put("style",service.getStyleName());
-            params.put("format",service.getFormat());
-            params.put("tilematrixset", service.getTileMatrixSetName());
-            params.put("TileMatrix", service.getTileMatrixSetName()+":"+tileIdentifier.getZ());
-            params.put("TileCol", tileIdentifier.getX());
-            params.put("TileRow", tileIdentifier.getY());
+    private URL getRESTurl(String baseUrl, TileIdentifier tileIdentifier) throws RuntimeException
+    {
+        baseUrl = baseUrl.replace("{TileMatrixSet}", service.getTileMatrixSetName());
+        baseUrl = baseUrl.replace("{TileMatrix}", "" + tileIdentifier.getZ());
+        baseUrl = baseUrl.replace("{TileCol}", "" + tileIdentifier.getX());
+        baseUrl = baseUrl.replace("{TileRow}", "" + tileIdentifier.getY());
 
-            StringBuilder arguments = new StringBuilder();
-            for(Object p:params.keySet()) {
-                try {
-                arguments.append(p+"="+URLEncoder.encode(params.get(p).toString(),"UTF-8"));
-                arguments.append('&');
-                }catch (Exception e) {
-                    // TODO: handle exception
-                }
-            }
-            try {
-                return new URL(baseUrl+arguments.toString());
-            } catch (MalformedURLException e) {
-                //I'm pretty sure this never happens!
-                throw new RuntimeException(e);
-            }
-        } else if (WMTSServiceType.REST.equals(type)) {
+        baseUrl = replaceToken(baseUrl, "time", service.getDimensions().get(WMTSService.DIMENSION_TIME));
 
-            baseUrl = baseUrl.replace("{TileMatrixSet}", service.getTileMatrixSetName());
-            baseUrl = baseUrl.replace("{TileMatrix}", "" + tileIdentifier.getZ());
-            baseUrl = baseUrl.replace("{TileCol}", "" + tileIdentifier.getX());
-            baseUrl = baseUrl.replace("{TileRow}", "" + tileIdentifier.getY());
+        LOGGER.fine("Requesting tile " + tileIdentifier.getCode());
 
+        try {
+            return new URL(baseUrl);
+        } catch (MalformedURLException e) {
+            //I'm pretty sure this never happens!
+            throw new RuntimeException(e);
+        }
+    }
 
-            LOGGER.fine("requesting " + tileIdentifier.getCode());
-            try {
-                return new URL(baseUrl);
-            } catch (MalformedURLException e) {
-                //I'm pretty sure this never happens!
-                throw new RuntimeException(e);
-            }
+    private String replaceToken(String base, String dimName, String dimValue) {
+        String token = "{" + dimName + "}";
+        int index = base.toLowerCase().indexOf(token.toLowerCase());
+        if(index != -1) {
+            LOGGER.fine("Resolving dimension " + dimName + " --> " + dimValue);
+            return base.substring(0, index) + dimValue + base.substring(index + dimName.length() + 2);
         } else {
-            throw new IllegalArgumentException("Unexpected WMTS Service type "+type);
+            return base;
+        }
+    }
+
+    private URL getKVPurl(String baseUrl, TileIdentifier tileIdentifier) throws RuntimeException
+    {
+        //in theory it should end with ? but there may be other params that the server needs out of spec
+        if(!baseUrl.contains("?")) {
+
+            baseUrl+="?";
+        }
+        HashMap<String, Object> params = new HashMap<>();
+        params.put("service", "WMTS");
+        params.put("version", "1.0.0");
+        params.put("request", "getTile");
+        params.put("layer",  service.getLayerName());
+        params.put("style",  service.getStyleName());
+        params.put("format", service.getFormat());
+        params.put("tilematrixset", service.getTileMatrixSetName());
+        params.put("TileMatrix", service.getTileMatrixSetName()+":"+tileIdentifier.getZ());
+        params.put("TileCol", tileIdentifier.getX());
+        params.put("TileRow", tileIdentifier.getY());
+
+        StringBuilder arguments = new StringBuilder();
+        for(Object p:params.keySet()) {
+            try {
+                arguments.append(p).append("=").append(URLEncoder.encode(params.get(p).toString(),"UTF-8"));
+                arguments.append('&');
+            }catch (Exception e) {
+                // TODO: handle exception
+            }
+        }
+        try {
+            return new URL(baseUrl+arguments.toString());
+        } catch (MalformedURLException e) {
+            //I'm pretty sure this never happens!
+            throw new RuntimeException(e);
         }
     }
 

@@ -16,31 +16,20 @@
  */
 package org.geotools.map;
 
-import java.awt.Rectangle;
-import java.awt.geom.AffineTransform;
-import java.awt.geom.Point2D;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.util.logging.Logger;
 
 import org.geotools.data.ows.Layer;
-import org.geotools.data.wms.WebMapServer;
 import org.geotools.data.wmts.WebMapTileServer;
 import org.geotools.data.wmts.request.GetTileRequest;
 import org.geotools.factory.CommonFactoryFinder;
-import org.geotools.geometry.DirectPosition2D;
 import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.geotools.referencing.CRS;
-import org.geotools.renderer.lite.RendererUtilities;
 import org.geotools.styling.FeatureTypeStyle;
 import org.geotools.styling.RasterSymbolizer;
 import org.geotools.styling.Rule;
 import org.geotools.styling.Style;
 import org.geotools.styling.StyleFactory;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
-import org.opengis.referencing.operation.MathTransform;
 
 /**
  * Wraps a WMTS layer into a {@link MapLayer} for interactive rendering usage
@@ -49,6 +38,7 @@ import org.opengis.referencing.operation.MathTransform;
  * TODO: expose the list of named styles and allow choosing which style to use
  *
  * @author Ian Turton
+ * @author Emanuele Tajariol (etj at geo-solutions dot it)
  */
 public class WMTSMapLayer extends GridReaderLayer {
 
@@ -75,17 +65,16 @@ public class WMTSMapLayer extends GridReaderLayer {
     /**
      * Builds a new WMS layer
      *
-     * @param wms
+     * @param wmts
      * @param layer
      */
-    public WMTSMapLayer(WebMapTileServer wms, Layer layer) {
-        super( new WMTSCoverageReader(wms, layer), STYLE );
+    public WMTSMapLayer(WebMapTileServer wmts, Layer layer) {
+        super( new WMTSCoverageReader(wmts, layer), STYLE );
     }
 
     public WMTSCoverageReader getReader(){
         return (WMTSCoverageReader) this.reader;
     }
-
 
     public synchronized ReferencedEnvelope getBounds() {
         WMTSCoverageReader wmsReader = getReader();
@@ -184,8 +173,6 @@ public class WMTSMapLayer extends GridReaderLayer {
     public WebMapTileServer getWebMapServer() {
         return getReader().wmts;
     }
-
-
 
     /**
      * Returns the CRS used to make requests to the remote WMS

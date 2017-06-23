@@ -21,6 +21,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.util.List;
 import java.util.Properties;
 
 import org.geotools.data.ows.CRSEnvelope;
@@ -34,6 +35,8 @@ import org.xml.sax.SAXException;
 
 import junit.framework.TestCase;
 import net.opengis.wmts.v_1.CapabilitiesType;
+import org.geotools.tile.impl.wmts.TileMatrixLimits;
+import org.geotools.tile.impl.wmts.TileMatrixSetLink;
 
 /**
  *
@@ -75,9 +78,8 @@ public class WMTSCapabilitiesTest extends TestCase {
                         "OpenGIS WMS Web Map Server".split(" ")[i]);
             }
 
-            
             WMTSRequest request = capabilities.getRequest();
-            
+
             assertEquals(request.getGetFeatureInfo().getGet(),
                     new URL("http://astun-desktop:8080/geoserver/gwc/service/wmts?"));
             OperationType getTile = request.getGetTile();
@@ -87,18 +89,83 @@ public class WMTSCapabilitiesTest extends TestCase {
 
             Layer[] layers = (Layer[]) capabilities.getLayerList()
                     .toArray(new Layer[capabilities.getLayerList().size()]);
-            assertEquals("OML_Foreshore",layers[0].getTitle());
-            assertNull(layers[0].getParent());
-            assertTrue(layers[0].getSrs().contains("urn:ogc:def:crs:EPSG::4326")); // case should not matter
+
+            WMTSLayer l0 = (WMTSLayer)layers[0];
+            assertEquals("OML_Foreshore", l0.getTitle());
+            assertNull(l0.getParent());
+            assertTrue(l0.getSrs().contains("urn:ogc:def:crs:EPSG::4326")); // case should not matter
+            assertEquals(4, l0.getBoundingBoxes().size());
+
+            assertEquals(2, l0.getTileMatrixLinks().size());
+            TileMatrixSetLink tmsl0 = l0.getTileMatrixLinks().get("EPSG:4326");
+            assertNotNull(tmsl0);
+            assertEquals("EPSG:4326", tmsl0.getIdentifier());
+            List<TileMatrixLimits> tmLimits = tmsl0.getLimits();
+            assertNotNull(tmLimits);
+            assertEquals("Bad size: TileMatrixLimits", 22, tmLimits.size());
+            TileMatrixLimits tml3 = tmLimits.get(3);
+            assertEquals(1, tml3.getMinrow());
+            assertEquals(1, tml3.getMaxrow());
+            assertEquals(7, tml3.getMincol());
+            assertEquals(7, tml3.getMaxcol());
             
             assertEquals("b_road",layers[1].getTitle());
             assertEquals("meridian:b_road", layers[1].getName() );
             assertEquals("b_road_polyline",layers[20].getTitle());
             assertEquals("meridian:b_road_polyline",layers[20].getName());
-            assertEquals(4,layers[0].getBoundingBoxes().size());
 
             CRSEnvelope bbox = (CRSEnvelope) layers[1].getBoundingBoxes().get("EPSG:4326");
             assertNotNull(bbox);
+        } catch (Exception e) {
+            e.printStackTrace();
+            if ((e.getMessage() != null) && e.getMessage().indexOf("timed out") > 0) {
+                System.err.println("Unable to test - timed out: " + e);
+            } else {
+                throw (e);
+            }
+        }
+    }
+
+    public void testParser2() throws Exception {
+        WMTSCapabilities capabilities = createCapabilities("WMTSCapabilities.admin_ch.xml");
+        try {
+            assertEquals("1.0.0", capabilities.getVersion());
+
+            WMTSService service = (WMTSService)capabilities.getService();
+            assertEquals("OGC WMTS", service.getName());
+            assertEquals("WMTS BGDI", service.getTitle());
+
+            String[] keywordList = service.getKeywordList();
+            assertNotNull(keywordList);
+            assertEquals("Switzerland", keywordList[0]);
+            assertEquals("Web Map Service", keywordList[1]);
+
+            WMTSRequest request = capabilities.getRequest();
+
+            OperationType getTile = request.getGetTile();
+            assertNotNull(getTile);
+
+            assertEquals(306,capabilities.getLayerList().size());
+
+            Layer[] layers = (Layer[]) capabilities.getLayerList()
+                    .toArray(new Layer[capabilities.getLayerList().size()]);
+
+            Layer l0 = layers[0];
+
+            assertEquals("ch.are.agglomerationen_isolierte_staedte", l0.getName());
+            assertNull(l0.getParent());
+
+            assertTrue(l0.getSrs().contains("urn:ogc:def:crs:EPSG::2056")); // case should not matter
+            assertTrue(l0.getSrs().contains("EPSG:2056")); // case should not matter
+
+            assertNotNull("Missing dimensions", l0.getDimensions());
+            assertEquals("Bad dimensions size", 1, l0.getDimensions().size());
+            assertEquals("Bad dimension name", "Time", l0.getDimensions().keySet().iterator().next());
+
+            CRSEnvelope bbox = (CRSEnvelope) layers[1].getBoundingBoxes().get("EPSG:4326");
+            assertNotNull(bbox);
+
+
         } catch (Exception e) {
             e.printStackTrace();
             if ((e.getMessage() != null) && e.getMessage().indexOf("timed out") > 0) {
@@ -179,7 +246,7 @@ public class WMTSCapabilitiesTest extends TestCase {
             Parser parser = new Parser(new WMTSConfiguration());
 
             Object object = parser.parse(new FileReader(getCaps));
-            assertTrue("Capabilities failed to parse", object instanceof CapabilitiesType);
+            assertTrue("Capabilities failed to parse " + object.getClass(), object instanceof CapabilitiesType);
 
             WMTSCapabilities capabilities = new WMTSCapabilities((CapabilitiesType) object);
             return capabilities;

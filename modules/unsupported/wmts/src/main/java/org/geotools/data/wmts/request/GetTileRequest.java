@@ -65,7 +65,7 @@ import org.opengis.referencing.crs.CoordinateReferenceSystem;
  *
  * @source $URL$
  */
-public interface GetTileRequest extends Request{
+public interface GetTileRequest extends Request {
 
     /**
      * Sets the version number of the request.
@@ -83,6 +83,7 @@ public interface GetTileRequest extends Request{
     public void setRequestedHeight(int height);
     public void setRequestedWidth(int width);
     public void setRequestedBBox(ReferencedEnvelope bbox);
+    public void setRequestedTime(String time);
 
     public void setCRS(CoordinateReferenceSystem coordinateReferenceSystem);
 }

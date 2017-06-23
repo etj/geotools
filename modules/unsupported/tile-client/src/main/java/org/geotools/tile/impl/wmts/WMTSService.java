@@ -78,6 +78,9 @@ public class WMTSService extends TileService {
     private static final String OWS = "http://www.opengis.net/ows/1.1";
     private static final String XLINK = "http://www.w3.org/1999/xlink";
 
+    public static final String DIMENSION_TIME = "time";
+    public static final String DIMENSION_ELEVATION = "elevation";
+
     private static final TileFactory tileFactory = new WMTSTileFactory();
 
     private String tileMatrixSetName = "";
@@ -101,6 +104,8 @@ public class WMTSService extends TileService {
     private List<TileMatrixLimits> limits;
 
     private File cachedGetCapabilities = null;
+
+    private Map<String, String> dimensions = new HashMap<>();
 
     private Map<String, Object> extrainfo = new HashMap<>();
 
@@ -836,6 +841,11 @@ public class WMTSService extends TileService {
     public WMTSZoomLevel getZoomLevel(int zoom) {
         //
         return new WMTSZoomLevel(zoom, this);
+    }
+
+    public Map<String, String> getDimensions()
+    {
+        return dimensions;
     }
 
     public Map<String, Object> getExtrainfo()

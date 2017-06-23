@@ -55,6 +55,7 @@ import net.opengis.ows11.AllowedValuesType;
 import net.opengis.ows11.BoundingBoxType;
 import net.opengis.ows11.CodeType;
 import net.opengis.ows11.DCPType;
+import net.opengis.ows11.DomainMetadataType;
 import net.opengis.ows11.DomainType;
 import net.opengis.ows11.LanguageStringType;
 import net.opengis.ows11.OperationsMetadataType;
@@ -132,12 +133,11 @@ public class WMTSCapabilities extends Capabilities {
                 WMTSLayer layer = new WMTSLayer(title);
                 layer.setName(layerType.getIdentifier().getValue());
 
-                EList<TileMatrixSetLinkType> tmsl = layerType.getTileMatrixSetLink();
-                for (int i = 0; i < tmsl.size(); i++) {
-                    TileMatrixSetLinkType t = tmsl.get(i);
-                    TileMatrixSetLink tms = new TileMatrixSetLink();
-                    tms.setIdentifier(t.getTileMatrixSet());
-                    TileMatrixSetLimitsType limits = t.getTileMatrixSetLimits();
+                EList<TileMatrixSetLinkType> tmsLinks = layerType.getTileMatrixSetLink();
+                for (TileMatrixSetLinkType linkType : tmsLinks) {
+                    TileMatrixSetLink link = new TileMatrixSetLink();
+                    link.setIdentifier(linkType.getTileMatrixSet());
+                    TileMatrixSetLimitsType limits = linkType.getTileMatrixSetLimits();
                     if (limits != null) {
                         for (TileMatrixLimitsType tmlt : limits.getTileMatrixLimits()) {
                             TileMatrixLimits tml = new TileMatrixLimits();
@@ -146,15 +146,17 @@ public class WMTSCapabilities extends Capabilities {
                             tml.setMaxCol(tmlt.getMaxTileCol().longValue());
                             tml.setMinRow(tmlt.getMinTileRow().longValue());
                             tml.setMaxRow(tmlt.getMaxTileRow().longValue());
-                            tms.addLimit(tml);
+                            link.addLimit(tml);
                         }
 
                     }
-                    layer.addTileMatrixLink(tms);
-
+                    layer.addTileMatrixLink(link);
                 }
+
                 layer.getFormats().addAll(layerType.getFormat());
+
                 layer.getInfoFormats().addAll(layerType.getInfoFormat());
+
                 @SuppressWarnings("unchecked")
                 EList<BoundingBoxType> bboxes = layerType.getBoundingBox();
                 Map<String, CRSEnvelope> boundingBoxes = new HashMap<>();
@@ -205,29 +207,33 @@ public class WMTSCapabilities extends Capabilities {
                     }
                 }
 
-//                EList<DimensionType> dimensionList = layerType.getDimension();
-//                if (dimensionList != null && !dimensionList.isEmpty()) {
-//                    for (DimensionType dimensionType : dimensionList) {
-//                        CodeType identifierType = dimensionType.getIdentifier();
-//                        String dimIdentifier = identifierType.getValue();
-//                        String dimDefault = dimensionType.getDefault();
-//
-//                        String dimSymb = dimensionType.getUnitSymbol();
-//                        String dimUom = dimensionType.getUOM().getValue();
-//                        // TODO: store all possibile values
-//
-//                        Dimension d = new Dimension(dimIdentifier, dimUom, dimSymb);
-//                        Extent e = new Extent(dimIdentifier, dimDefault, false, false, dimDefault);
-//                        d.setExtent(e);
-//                        layer.setDimensions(d);
-//                    }
-//                }
+                EList<DimensionType> dimensionList = layerType.getDimension();
+                if (dimensionList != null && !dimensionList.isEmpty()) {
+                    for (DimensionType dimensionType : dimensionList) {
+                        CodeType identifierType = dimensionType.getIdentifier();
+                        String dimIdentifier = identifierType.getValue();
+                        String dimDefault = dimensionType.getDefault();
+
+                        DomainMetadataType uom = dimensionType.getUOM();
+                        String dimUom = uom == null? "N/A" : uom.getValue();
+
+                        Dimension d = new Dimension(dimIdentifier, dimUom);
+                        d.setUnitSymbol(dimensionType.getUnitSymbol());
+                        d.setCurrent(dimensionType.isCurrent());
+
+                        Extent e = new Extent(dimIdentifier, dimDefault, false, false, dimDefault);
+                        // TODO: store all possibile values
+                        d.setExtent(e);
+
+                        layer.getLayerDimensions().add(d);
+                    }
+                }
 
                 layers.add(layer);
                 layerMap.put(layer.getName(), layer);
             }
-
         }
+
         for (TileMatrixSetType tm : contents.getTileMatrixSet()) {
             TileMatrixSet matrixSet = new TileMatrixSet();
             matrixSet.setCRS(tm.getSupportedCRS());

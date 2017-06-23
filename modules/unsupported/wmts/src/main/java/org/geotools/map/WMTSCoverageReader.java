@@ -23,6 +23,7 @@ import org.geotools.coverage.grid.io.AbstractGridCoverage2DReader;
 import org.geotools.coverage.grid.io.AbstractGridFormat;
 import org.geotools.data.wms.request.GetFeatureInfoRequest;
 import org.geotools.data.wms.response.GetFeatureInfoResponse;
+import org.geotools.data.wms.xml.Dimension;
 import org.geotools.data.wmts.WMTSLayer;
 import org.geotools.data.wmts.WebMapTileServer;
 import org.geotools.data.wmts.request.GetTileRequest;
@@ -184,12 +185,12 @@ public class WMTSCoverageReader extends AbstractGridCoverage2DReader {
         } else {
             LOGGER.info("TODO: check if this code path is ever run");
 
-            Set<String> intersection = new HashSet<String>(validSRS);
+            Set<String> intersection = new HashSet<>(validSRS);
             intersection.retainAll(owsLayer.getSrs());
 
             // can we reuse what we have?
             if (!intersection.contains(srsName)) {
-                if (intersection.size() == 0) {
+                if (intersection.isEmpty()) {
                     throw new IllegalArgumentException("The layer being appended does "
                             + "not have any SRS in common with the ones already "
                             + "included in the WMS request, cannot be merged");
@@ -259,6 +260,16 @@ public class WMTSCoverageReader extends AbstractGridCoverage2DReader {
         int width = -1;
         int height = -1;
 
+        // check out if time coordinate is needed, and provide a valid default
+        String time = null;
+        for (Dimension dim : layer.getLayerDimensions()) {
+            if("time".equalsIgnoreCase(dim.getName())) {
+                time = dim.getExtent().getDefaultValue();
+                LOGGER.fine("TIME dimension found, default is " + time);
+                break;
+            }
+        }
+
         if (parameters != null) {
             for (GeneralParameterValue param : parameters) {
                 final ReferenceIdentifier name = param.getDescriptor().getName();
@@ -269,6 +280,10 @@ public class WMTSCoverageReader extends AbstractGridCoverage2DReader {
                     // the actual width and height is one more than that
                     width = gg.getGridRange().getHigh(0) + 1;
                     height = gg.getGridRange().getHigh(1) + 1;
+                } else if (name.equals(AbstractGridFormat.TIME.getName())) {
+                    LOGGER.fine("TIME parameter found");
+                    time = (String)((ParameterValue) param).getValue(); // check cast
+                    LOGGER.fine("TIME parameter value is " + time);
                 }
             }
         }
@@ -287,18 +302,18 @@ public class WMTSCoverageReader extends AbstractGridCoverage2DReader {
                 && grid.getEnvelope().equals(requestedEnvelope))
             return grid;
 
-        grid = getMap(reference(requestedEnvelope), width, height);
+        grid = getMap(reference(requestedEnvelope), width, height, time);
         return grid;
     }
 
     /**
      * Execute the GetMap request
      */
-    GridCoverage2D getMap(ReferencedEnvelope requestedEnvelope, int width, int height)
+    GridCoverage2D getMap(ReferencedEnvelope requestedEnvelope, int width, int height, String time)
             throws IOException {
         
         // build the request
-        ReferencedEnvelope gridEnvelope = initTileRequest(requestedEnvelope, width, height);
+        ReferencedEnvelope gridEnvelope = initTileRequest(requestedEnvelope, width, height, time);
 
         // issue the request and wrap response in a grid coverage
         try {
@@ -323,7 +338,7 @@ public class WMTSCoverageReader extends AbstractGridCoverage2DReader {
 
             return gcf.create(layer.getTitle(), image, gridEnvelope);
         } catch (ServiceException e) {
-            throw (IOException) new IOException("GetMap failed").initCause(e);
+            throw new IOException("GetMap failed", e);
         }
 
     }
@@ -402,7 +417,7 @@ public class WMTSCoverageReader extends AbstractGridCoverage2DReader {
      * @return
      * @throws IOException
      */
-    ReferencedEnvelope initTileRequest(ReferencedEnvelope bbox, int width, int height)
+    ReferencedEnvelope initTileRequest(ReferencedEnvelope bbox, int width, int height, String time)
             throws IOException {
 
         ReferencedEnvelope gridEnvelope = bbox;
@@ -445,6 +460,7 @@ public class WMTSCoverageReader extends AbstractGridCoverage2DReader {
         tileRequest.setRequestedHeight(height);
         tileRequest.setRequestedWidth(width);
         tileRequest.setRequestedBBox(gridEnvelope); // should be requestEnvelope?
+        tileRequest.setRequestedTime(time); 
 
         try {
             this.requestCRS = CRS.decode(requestSrs);

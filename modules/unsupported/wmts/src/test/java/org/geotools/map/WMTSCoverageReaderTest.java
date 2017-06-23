@@ -50,8 +50,9 @@ import org.xml.sax.SAXException;
  */
 public class WMTSCoverageReaderTest {
 
+
     private final static String KVP_CAPA_RESOURCENAME = "getcapa_kvp.xml";
-    private final static String REST_CAPA_RESOURCENAME = "WMTSCapabilities.admin_ch.xml";
+    private final static String REST_CAPA_RESOURCENAME = "org/geotools/data/wmts/test-data/WMTSCapabilities.admin_ch.xml";
 
     @Test
     public void testRESTInitMapRequest() throws Exception {
@@ -76,7 +77,7 @@ public class WMTSCoverageReaderTest {
         int width=400;
         int height=200;
         Color backgroundColor = Color.WHITE;
-        ReferencedEnvelope grid = wcr.initTileRequest(bbox, width, height);
+        ReferencedEnvelope grid = wcr.initTileRequest(bbox, width, height, null);
         assertNotNull(grid);
         GetTileRequest mapRequest = wcr.getTileRequest();
         mapRequest.setCRS(grid.getCoordinateReferenceSystem());

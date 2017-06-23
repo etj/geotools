@@ -95,6 +95,7 @@ public abstract class AbstractGetTileRequest extends AbstractWMTSRequest
     private ReferencedEnvelope requestedBBox;
     private int requestedHeight;
     private int requestedWidth;
+    private String requestedTime;
 
     private CoordinateReferenceSystem crs;
 
@@ -130,21 +131,21 @@ public abstract class AbstractGetTileRequest extends AbstractWMTSRequest
         this.styleName = styleName;
     }
 
-    public void setRequestedHeight(int height)
-    {
+    public void setRequestedHeight(int height) {
         this.requestedHeight = height;
     }
 
-    public void setRequestedWidth(int width)
-    {
+    public void setRequestedWidth(int width) {
         this.requestedWidth = width;
     }
 
-    public void setRequestedBBox(ReferencedEnvelope requestedBBox)
-    {
+    public void setRequestedBBox(ReferencedEnvelope requestedBBox) {
         this.requestedBBox = requestedBBox;
     }
 
+    public void setRequestedTime(String requestedTime) {
+        this.requestedTime = requestedTime;
+    }
 
 //    @Override
 //    public void setSRS(String srs) {
@@ -172,7 +173,7 @@ public abstract class AbstractGetTileRequest extends AbstractWMTSRequest
      */
     @Override
     public Set<Tile> getTiles() throws ServiceException {
-        Set<Tile> tiles = new HashSet<>();
+        Set<Tile> tiles;
         if (layer == null) {
             throw new ServiceException("GetTiles called with no layer set");
         }
@@ -270,8 +271,10 @@ public abstract class AbstractGetTileRequest extends AbstractWMTSRequest
             }
             requestUrl = layer.getTemplate(format);
         }
-        TileService wmtsService = new WMTSService(requestUrl, type, layerString, styleString,
+        WMTSService wmtsService = new WMTSService(requestUrl, type, layerString, styleString,
                 matrixSet, layer.getTileMatrixLinks().get(matrixSet.getIdentifier()).getLimits());
+        wmtsService.getDimensions().put(WMTSService.DIMENSION_TIME, requestedTime);
+
 
         // zoomLevel = factory.getZoomLevel(zoom, wmtsService);
         int scale = 0;
@@ -281,7 +284,7 @@ public abstract class AbstractGetTileRequest extends AbstractWMTSRequest
         } catch (FactoryException | TransformException ex) {
             throw new RuntimeException("Failed to calculate scale", ex);
         }
-        tiles = ((WMTSService) wmtsService).findTilesInExtent(requestedBBox, scale, false, MAXTILES);
+        tiles = wmtsService.findTilesInExtent(requestedBBox, scale, false, MAXTILES);
         LOGGER.fine("found " + tiles.size() + " tiles in " + requestedBBox);
         if (tiles.isEmpty()) {
             return tiles;
@@ -324,7 +327,6 @@ public abstract class AbstractGetTileRequest extends AbstractWMTSRequest
         tiles.removeAll(remove);
 
         return tiles;
-
     }
 
 

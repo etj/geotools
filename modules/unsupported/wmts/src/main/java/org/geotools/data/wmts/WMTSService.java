@@ -16,12 +16,15 @@
  */
 package org.geotools.data.wmts;
 
+import java.util.ArrayList;
+import java.util.List;
 import org.eclipse.emf.common.util.EList;
 import org.geotools.data.ows.Service;
 
 import net.opengis.ows11.LanguageStringType;
 import net.opengis.ows11.ServiceIdentificationType;
 import net.opengis.ows11.impl.KeywordsTypeImpl;
+import net.opengis.ows11.impl.LanguageStringTypeImpl;
 
 /**
  * @author ian
@@ -32,13 +35,20 @@ public class WMTSService extends Service {
      * 
      */
     public WMTSService(ServiceIdentificationType serviceType) {
+
         setTitle(((LanguageStringType) serviceType.getTitle().get(0)).getValue());
         setName(serviceType.getServiceType().getValue());
-        EList kws = serviceType.getKeywords();
-        String[] keywords = new String[kws.size()];
-        for(int i=0;i<kws.size();i++) {
-            keywords[i] = ((KeywordsTypeImpl)kws.get(i)).getKeyword().toString();
+
+        List<String> retList = new ArrayList<>();
+
+        for (Object okti : serviceType.getKeywords()) {
+            KeywordsTypeImpl kti = (KeywordsTypeImpl)okti;
+            for (Object olsti : kti.getKeyword()) {
+                LanguageStringTypeImpl lsti = (LanguageStringTypeImpl)olsti;
+                retList.add(lsti.getValue());
+            }
         }
-        setKeywordList(keywords);
+        
+        setKeywordList(retList.toArray(new String[retList.size()]));
     }
 }
