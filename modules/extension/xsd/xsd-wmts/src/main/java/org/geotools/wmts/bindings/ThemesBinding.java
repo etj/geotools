@@ -3,7 +3,7 @@ package org.geotools.wmts.bindings;
 
 import org.geotools.wmts.WMTS;
 import org.geotools.xml.*;
-import org.geotools.xml.AbstractSimpleBinding;
+import org.geotools.xml.AbstractComplexBinding;
 
 import net.opengis.wmts.v_1.ThemesType;
 import net.opengis.wmts.v_1.wmtsv_1Factory;		
@@ -43,7 +43,7 @@ import javax.xml.namespace.QName;
  *
  * @generated
  */
-public class ThemesBinding extends AbstractSimpleBinding {
+public class ThemesBinding extends AbstractComplexBinding {
 
 	wmtsv_1Factory factory;		
 	public ThemesBinding( wmtsv_1Factory factory ) {

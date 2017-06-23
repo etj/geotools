@@ -3,7 +3,7 @@ package org.geotools.wmts.bindings;
 
 import org.geotools.wmts.WMTS;
 import org.geotools.xml.*;
-import org.geotools.xml.AbstractSimpleBinding;
+import org.geotools.xml.AbstractComplexBinding;
 
 import net.opengis.wmts.v_1.BinaryPayloadType;
 import net.opengis.wmts.v_1.wmtsv_1Factory;		
@@ -45,7 +45,7 @@ import javax.xml.namespace.QName;
  *
  * @generated
  */
-public class BinaryPayloadBinding extends AbstractSimpleBinding {
+public class BinaryPayloadBinding extends AbstractComplexBinding {
 
 	wmtsv_1Factory factory;		
 	public BinaryPayloadBinding( wmtsv_1Factory factory ) {

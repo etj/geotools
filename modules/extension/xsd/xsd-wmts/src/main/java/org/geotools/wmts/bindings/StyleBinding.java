@@ -56,7 +56,7 @@ import javax.xml.namespace.QName;
  *
  * @generated
  */
-public class StyleBinding extends AbstractSimpleBinding {
+public class StyleBinding extends AbstractComplexBinding {
 
     wmtsv_1Factory factory;
 
@@ -92,7 +92,13 @@ public class StyleBinding extends AbstractSimpleBinding {
         StyleType style = factory.createStyleType();
 
         style.setIdentifier((CodeType) node.getChildValue("Identifier"));
-        style.setIsDefault((boolean) node.getAttributeValue("default"));
+        Object def = node.getAttributeValue("isDefault");
+        if(def!=null) {
+            style.setIsDefault((boolean) def);
+        }else {
+            style.setIsDefault(false);
+        }
+
         List<Node> children = node.getChildren("LegendURL");
         for (Node c : children) {
             style.getLegendURL().add((LegendURLType) c.getValue());

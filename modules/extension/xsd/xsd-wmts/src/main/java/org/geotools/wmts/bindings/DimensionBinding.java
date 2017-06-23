@@ -78,7 +78,7 @@ import javax.xml.namespace.QName;
  *
  * @generated
  */
-public class DimensionBinding extends AbstractSimpleBinding {
+public class DimensionBinding extends AbstractComplexBinding {
 
 	wmtsv_1Factory factory;		
 	public DimensionBinding( wmtsv_1Factory factory ) {
@@ -112,13 +112,13 @@ public class DimensionBinding extends AbstractSimpleBinding {
 	public Object parse(ElementInstance instance, Node node, Object value) 
 		throws Exception {
 	    DimensionType dimension = factory.createDimensionType();
-	    
-	    dimension.setCurrent((boolean) node.getChildValue("Current"));
+
+	    dimension.setCurrent((boolean) node.getChildValue("Current", false));
 	    dimension.setDefault((String) node.getChildValue("Default"));
 	    dimension.setIdentifier((CodeType) node.getChildValue("Identifier"));
-	    dimension.setUnitSymbol((String) node.getChildValue("UnitSymbol"));
+	    dimension.setUnitSymbol((String) node.getChildValue("UnitSymbol", null));
 	    dimension.setUOM((DomainMetadataType) node.getChild("UOM"));
-	    dimension.getValue().addAll(node.getChildren("Value"));
+	    dimension.getValue().addAll(node.getChildValues("Value"));
 	    return dimension;
 	}
 

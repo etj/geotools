@@ -4,7 +4,7 @@ package org.geotools.wmts.bindings;
 import org.eclipse.emf.ecore.EObject;
 import org.geotools.wmts.WMTS;
 import org.geotools.xml.*;
-import org.geotools.xml.AbstractSimpleBinding;
+import org.geotools.xml.AbstractComplexBinding;
 
 import net.opengis.wmts.v_1.BinaryPayloadType;
 import net.opengis.wmts.v_1.FeatureInfoResponseType;
@@ -67,7 +67,7 @@ import javax.xml.namespace.QName;
  *
  * @generated
  */
-public class FeatureInfoResponseBinding extends AbstractSimpleBinding {
+public class FeatureInfoResponseBinding extends AbstractComplexBinding {
 
 	wmtsv_1Factory factory;		
 	public FeatureInfoResponseBinding( wmtsv_1Factory factory ) {

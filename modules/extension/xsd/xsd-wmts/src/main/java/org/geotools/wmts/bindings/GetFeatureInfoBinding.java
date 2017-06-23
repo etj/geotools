@@ -2,7 +2,7 @@ package org.geotools.wmts.bindings;
 
 import org.geotools.wmts.WMTS;
 import org.geotools.xml.*;
-import org.geotools.xml.AbstractSimpleBinding;
+import org.geotools.xml.AbstractComplexBinding;
 
 import net.opengis.wmts.v_1.GetFeatureInfoType;
 import net.opengis.wmts.v_1.GetTileType;
@@ -55,7 +55,7 @@ import javax.xml.namespace.QName;
  *
  * @generated
  */
-public class GetFeatureInfoBinding extends AbstractSimpleBinding {
+public class GetFeatureInfoBinding extends AbstractComplexBinding {
 
     wmtsv_1Factory factory;
 

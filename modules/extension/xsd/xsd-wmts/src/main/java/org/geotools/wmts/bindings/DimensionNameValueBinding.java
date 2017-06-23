@@ -3,7 +3,7 @@ package org.geotools.wmts.bindings;
 
 import org.geotools.wmts.WMTS;
 import org.geotools.xml.*;
-import org.geotools.xml.AbstractSimpleBinding;
+import org.geotools.xml.AbstractComplexBinding;
 
 import net.opengis.wmts.v_1.DimensionNameValueType;
 import net.opengis.wmts.v_1.wmtsv_1Factory;		
@@ -39,7 +39,7 @@ import javax.xml.namespace.QName;
  *
  * @generated
  */
-public class DimensionNameValueBinding extends AbstractSimpleBinding {
+public class DimensionNameValueBinding extends AbstractComplexBinding {
 
 	wmtsv_1Factory factory;		
 	public DimensionNameValueBinding( wmtsv_1Factory factory ) {

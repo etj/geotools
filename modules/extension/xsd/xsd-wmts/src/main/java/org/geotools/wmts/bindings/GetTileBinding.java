@@ -2,7 +2,7 @@ package org.geotools.wmts.bindings;
 
 import org.geotools.wmts.WMTS;
 import org.geotools.xml.*;
-import org.geotools.xml.AbstractSimpleBinding;
+import org.geotools.xml.AbstractComplexBinding;
 
 import net.opengis.wmts.v_1.DimensionNameValueType;
 import net.opengis.wmts.v_1.DimensionType;
@@ -76,7 +76,7 @@ import javax.xml.namespace.QName;
  *
  * @generated
  */
-public class GetTileBinding extends AbstractSimpleBinding {
+public class GetTileBinding extends AbstractComplexBinding {
 
     wmtsv_1Factory factory;
 

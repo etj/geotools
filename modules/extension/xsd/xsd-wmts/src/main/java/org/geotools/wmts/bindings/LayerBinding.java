@@ -26,7 +26,8 @@ import net.opengis.wmts.v_1.wmtsv_1Factory;
  * 
  * <pre>
  *	 <code>
- *  &lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;element name="Layer" substitutionGroup="ows:DatasetDescriptionSummary" type="wmts:LayerType" xmlns="http://www.w3.org/2001/XMLSchema"/&gt; 
+ *  &lt;?xml version="1.0" encoding="UTF-8"?&gt;
+ *     &lt;element name="Layer" substitutionGroup="ows:DatasetDescriptionSummary" type="wmts:LayerType" xmlns="http://www.w3.org/2001/XMLSchema"/&gt;
  *		
  *	  </code>
  * </pre>

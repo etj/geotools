@@ -2,7 +2,7 @@ package org.geotools.wmts.bindings;
 
 import org.geotools.wmts.WMTS;
 import org.geotools.xml.*;
-import org.geotools.xml.AbstractSimpleBinding;
+import org.geotools.xml.AbstractComplexBinding;
 
 import net.opengis.wmts.v_1.TileMatrixSetLimitsType;
 import net.opengis.wmts.v_1.TileMatrixSetLinkType;
@@ -46,7 +46,7 @@ import javax.xml.namespace.QName;
  *
  * @generated
  */
-public class TileMatrixSetLinkBinding extends AbstractSimpleBinding {
+public class TileMatrixSetLinkBinding extends AbstractComplexBinding {
 
     wmtsv_1Factory factory;
 

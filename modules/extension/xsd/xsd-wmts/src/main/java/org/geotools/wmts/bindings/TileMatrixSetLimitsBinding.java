@@ -2,7 +2,7 @@ package org.geotools.wmts.bindings;
 
 import org.geotools.wmts.WMTS;
 import org.geotools.xml.*;
-import org.geotools.xml.AbstractSimpleBinding;
+import org.geotools.xml.AbstractComplexBinding;
 
 import net.opengis.wmts.v_1.TileMatrixLimitsType;
 import net.opengis.wmts.v_1.TileMatrixSetLimitsType;
@@ -47,7 +47,7 @@ import javax.xml.namespace.QName;
  *
  * @generated
  */
-public class TileMatrixSetLimitsBinding extends AbstractSimpleBinding {
+public class TileMatrixSetLimitsBinding extends AbstractComplexBinding {
 
     wmtsv_1Factory factory;
 
@@ -82,10 +82,10 @@ public class TileMatrixSetLimitsBinding extends AbstractSimpleBinding {
         TileMatrixSetLimitsType limits = factory.createTileMatrixSetLimitsType();
 
         @SuppressWarnings("unchecked")
-        List<Node> children = node.getChildren("TileMatrixSetLimits");
-        for (Node c : children) {
 
-            limits.getTileMatrixLimits().add((TileMatrixLimitsType) c);
+        List<Node> children = node.getChildren("TileMatrixLimits");
+        for (Node c : children) {
+            limits.getTileMatrixLimits().add((TileMatrixLimitsType) c.getValue());
         }
         return limits;
     }

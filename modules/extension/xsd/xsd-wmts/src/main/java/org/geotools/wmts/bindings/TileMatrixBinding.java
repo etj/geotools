@@ -2,7 +2,7 @@ package org.geotools.wmts.bindings;
 
 import org.geotools.wmts.WMTS;
 import org.geotools.xml.*;
-import org.geotools.xml.AbstractSimpleBinding;
+import org.geotools.xml.AbstractComplexBinding;
 
 import net.opengis.ows11.CodeType;
 import net.opengis.wmts.v_1.TileMatrixType;
@@ -80,7 +80,7 @@ import javax.xml.namespace.QName;
  *
  * @generated
  */
-public class TileMatrixBinding extends AbstractSimpleBinding {
+public class TileMatrixBinding extends AbstractComplexBinding {
 
     wmtsv_1Factory factory;
 
@@ -111,8 +111,14 @@ public class TileMatrixBinding extends AbstractSimpleBinding {
      * @generated modifiable
      */
     public Object parse(ElementInstance instance, Node node, Object value) throws Exception {
+        if(node.getChildren().isEmpty()) {
+            // we are in a Contents/Layer/TileMatrixSetLink/TileMatrixSetLimits/TileMatrixLimits/TileMatrix (simple) element
+            return (String)value;
+        }
+
+        // we are in a Contents/TileMatrixSet/TileMatrix (complex) element
         TileMatrixType tileMatrix = factory.createTileMatrixType();
-        tileMatrix.setIdentifier((CodeType) node.getChild("Identifier"));
+        tileMatrix.setIdentifier((CodeType) node.getChildValue("Identifier"));
         tileMatrix.setMatrixHeight((BigInteger) node.getChildValue("MatrixHeight"));
         tileMatrix.setMatrixWidth((BigInteger) node.getChildValue("MatrixWidth"));
         tileMatrix.setScaleDenominator((double) node.getChildValue("ScaleDenominator"));

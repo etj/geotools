@@ -2,6 +2,7 @@ package org.geotools.wmts.bindings;
 
 import org.geotools.wmts.WMTS;
 import org.geotools.xml.*;
+import org.geotools.xml.AbstractComplexBinding;
 
 import net.opengis.ows11.BoundingBoxType;
 import net.opengis.ows11.CodeType;
@@ -77,7 +78,7 @@ import javax.xml.namespace.QName;
  *
  * @generated
  */
-public class TileMatrixSetBinding extends AbstractSimpleBinding {
+public class TileMatrixSetBinding extends AbstractComplexBinding {
 
     wmtsv_1Factory factory;
 
@@ -98,7 +99,7 @@ public class TileMatrixSetBinding extends AbstractSimpleBinding {
      * 
      * @generated modifiable
      */
-    public Class getType() {
+    public Class<TileMatrixSetType> getType() {
         return TileMatrixSetType.class;
     }
 
@@ -108,6 +109,13 @@ public class TileMatrixSetBinding extends AbstractSimpleBinding {
      * @generated modifiable
      */
     public Object parse(ElementInstance instance, Node node, Object value) throws Exception {
+
+        if(node.getChildren().isEmpty()) {
+            // we are in a Contents/Layer/TileMatrixSetLink/TileMatrixSet (simple) element
+            return (String)value;
+        }
+
+        // we are in a Contents/TileMatrixSet (complex) element
         TileMatrixSetType matrixSet = factory.createTileMatrixSetType();
         matrixSet.setBoundingBox((BoundingBoxType) node.getChildValue("BoundingBox"));
         matrixSet.setIdentifier((CodeType) node.getChildValue("Identifier"));
@@ -120,8 +128,6 @@ public class TileMatrixSetBinding extends AbstractSimpleBinding {
         }
 
         return matrixSet;
-        
-       
     }
 
 }

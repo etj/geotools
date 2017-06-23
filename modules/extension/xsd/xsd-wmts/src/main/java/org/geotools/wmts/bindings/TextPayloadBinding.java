@@ -2,7 +2,7 @@ package org.geotools.wmts.bindings;
 
 import org.geotools.wmts.WMTS;
 import org.geotools.xml.*;
-import org.geotools.xml.AbstractSimpleBinding;
+import org.geotools.xml.AbstractComplexBinding;
 
 import net.opengis.wmts.v_1.TextPayloadType;
 import net.opengis.wmts.v_1.wmtsv_1Factory;
@@ -42,7 +42,7 @@ import javax.xml.namespace.QName;
  *
  * @generated
  */
-public class TextPayloadBinding extends AbstractSimpleBinding {
+public class TextPayloadBinding extends AbstractComplexBinding {
 
     wmtsv_1Factory factory;
 

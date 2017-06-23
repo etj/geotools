@@ -3,7 +3,7 @@ package org.geotools.wmts.bindings;
 
 import org.geotools.wmts.WMTS;
 import org.geotools.xml.*;
-import org.geotools.xml.AbstractSimpleBinding;
+import org.geotools.xml.AbstractComplexBinding;
 
 import net.opengis.ows11.AcceptFormatsType;
 import net.opengis.wmts.v_1.GetCapabilitiesType;
@@ -36,7 +36,7 @@ import javax.xml.namespace.QName;
  *
  * @generated
  */
-public class GetCapabilitiesBinding extends AbstractSimpleBinding {
+public class GetCapabilitiesBinding extends AbstractComplexBinding {
 
 	wmtsv_1Factory factory;		
 	public GetCapabilitiesBinding( wmtsv_1Factory factory ) {

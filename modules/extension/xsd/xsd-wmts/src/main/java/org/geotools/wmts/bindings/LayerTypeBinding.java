@@ -24,7 +24,6 @@ import net.opengis.wmts.v_1.wmtsv_1Factory;
  * Binding object for the type http://www.opengis.net/wmts/1.0:LayerType.
  *
  * <p>
- * 
  * <pre>
  *	 <code>
  *  &lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;complexType name="LayerType" xmlns="http://www.w3.org/2001/XMLSchema"&gt;
@@ -111,7 +110,9 @@ public class LayerTypeBinding extends AbstractComplexBinding {
     @SuppressWarnings("unchecked")
     public Object parse(ElementInstance instance, Node node, Object value) throws Exception {
         LayerType layer = factory.createLayerType();
+
         List<Node> children;
+        
         children = node.getChildren("Abstract");
         for (Node c : children) {
             layer.getAbstract().add(c.getValue());
@@ -125,10 +126,13 @@ public class LayerTypeBinding extends AbstractComplexBinding {
         for (Node c : children) {
             layer.getWGS84BoundingBox().add(c.getValue());
         }
-        //layer.getWGS84BoundingBox().add(node.getChildValue("WGS84BoundingBox"));
+
         layer.getDatasetDescriptionSummary()
                 .addAll(node.getChildren(DatasetDescriptionSummaryBaseType.class));
-        layer.getDimension().addAll(node.getChildren(DimensionType.class));
+
+        layer.getDimension()
+                .addAll(node.getChildValues(DimensionType.class));
+
         children = node.getChildren("Format");
         for (Node c : children) {
             layer.getFormat().add((String) c.getValue());
@@ -138,18 +142,19 @@ public class LayerTypeBinding extends AbstractComplexBinding {
         for (Node c : children) {
             layer.getInfoFormat().add((String) c.getValue());
         }
-        
+
         layer.setIdentifier((CodeType) node.getChildValue("Identifier"));
-        List<Node> children3 = node.getChildren("Keyword");
-        for(Node c:children3) {
+
+        children = node.getChildren("Keyword");
+        for(Node c: children) {
             layer.getKeywords().add(c.getValue());
         }
-        children3 = node.getChildren(MetadataType.class);
-        for(Node c:children3) {
+        children = node.getChildren(MetadataType.class);
+        for(Node c: children) {
             layer.getMetadata().add(c.getValue());
         }
-        children3 = node.getChildren("ResourceURL");
-        for (Node c : children3) {
+        children = node.getChildren("ResourceURL");
+        for (Node c : children) {
             layer.getResourceURL().add((URLTemplateType) c.getValue());
         }
         children = node.getChildren("Style");
@@ -157,10 +162,11 @@ public class LayerTypeBinding extends AbstractComplexBinding {
             layer.getStyle().add((StyleType) c.getValue());
         }
 
-        List<Node> children2 = node.getChildren("TileMatrixSetLink");
-        for (Node c : children2) {
+        children = node.getChildren("TileMatrixSetLink");
+        for (Node c : children) {
             layer.getTileMatrixSetLink().add((TileMatrixSetLinkType) c.getValue());
         }
+
         children = node.getChildren("Title");
         for (Node c : children) {
             layer.getTitle().add(c.getValue());
