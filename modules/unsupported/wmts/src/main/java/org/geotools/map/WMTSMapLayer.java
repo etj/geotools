@@ -23,12 +23,15 @@ import org.geotools.data.wmts.WebMapTileServer;
 import org.geotools.data.wmts.request.GetTileRequest;
 import org.geotools.factory.CommonFactoryFinder;
 import org.geotools.geometry.jts.ReferencedEnvelope;
+import org.geotools.parameter.DefaultParameterDescriptor;
+import org.geotools.parameter.Parameter;
 import org.geotools.referencing.CRS;
 import org.geotools.styling.FeatureTypeStyle;
 import org.geotools.styling.RasterSymbolizer;
 import org.geotools.styling.Rule;
 import org.geotools.styling.Style;
 import org.geotools.styling.StyleFactory;
+import org.opengis.parameter.GeneralParameterValue;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
 
 /**
@@ -62,6 +65,8 @@ public class WMTSMapLayer extends GridReaderLayer {
         STYLE.featureTypeStyles().add(type);
     }
 
+    private String rawTime;
+
     /**
      * Builds a new WMS layer
      *
@@ -71,7 +76,7 @@ public class WMTSMapLayer extends GridReaderLayer {
     public WMTSMapLayer(WebMapTileServer wmts, Layer layer) {
         super( new WMTSCoverageReader(wmts, layer), STYLE );
     }
-
+    
     public WMTSCoverageReader getReader(){
         return (WMTSCoverageReader) this.reader;
     }
@@ -209,5 +214,12 @@ public class WMTSMapLayer extends GridReaderLayer {
         }
     }
 
+    public String getRawTime() {
+        return rawTime;
+    }
 
+    public void setRawTime(String rawTime) {
+        this.rawTime = rawTime;
+        getReader().setRequestedTime(rawTime);
+    }
 }

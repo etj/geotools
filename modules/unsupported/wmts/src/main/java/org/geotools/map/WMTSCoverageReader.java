@@ -114,6 +114,7 @@ public class WMTSCoverageReader extends AbstractGridCoverage2DReader {
      */
     CoordinateReferenceSystem requestCRS;
 
+    String requestedTime;
     /**
      * Builds a new WMS coverage reader
      * 
@@ -269,6 +270,10 @@ public class WMTSCoverageReader extends AbstractGridCoverage2DReader {
                 break;
             }
         }
+        if(requestedTime != null) {
+            LOGGER.fine("TIME dimension requested: " + requestedTime);
+            time = requestedTime;
+        }
 
         if (parameters != null) {
             for (GeneralParameterValue param : parameters) {
@@ -280,10 +285,10 @@ public class WMTSCoverageReader extends AbstractGridCoverage2DReader {
                     // the actual width and height is one more than that
                     width = gg.getGridRange().getHigh(0) + 1;
                     height = gg.getGridRange().getHigh(1) + 1;
-                } else if (name.equals(AbstractGridFormat.TIME.getName())) {
-                    LOGGER.fine("TIME parameter found");
-                    time = (String)((ParameterValue) param).getValue(); // check cast
-                    LOGGER.fine("TIME parameter value is " + time);
+//                } else if (name.equals(AbstractGridFormat.TIME.getName())) {
+//                    LOGGER.fine("TIME parameter found");
+//                    time = (String)((ParameterValue) param).getValue(); // check cast
+//                    LOGGER.fine("TIME parameter value is " + time);
                 }
             }
         }
@@ -546,6 +551,14 @@ public class WMTSCoverageReader extends AbstractGridCoverage2DReader {
      */
     public void setTileRequest(GetTileRequest mapRequest) {
         this.tileRequest = mapRequest;
+    }
+
+    public String getRequestedTime() {
+        return requestedTime;
+    }
+
+    public void setRequestedTime(String requestedTime) {
+        this.requestedTime = requestedTime;
     }
 
 }
