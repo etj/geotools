@@ -208,68 +208,24 @@ public abstract class AbstractGetTileRequest extends AbstractWMTSRequest
 
 //        int w = Integer.parseInt(width);
 //        int h = Integer.parseInt(height);
-        TileMatrixSet matrixSet = null;
-        Map<String, TileMatrixSetLink> links = layer.getTileMatrixLinks();
-        CoordinateReferenceSystem requestCRS = getCrs();
-        LOGGER.fine("request CRS " + requestCRS);
-        if (requestCRS == null) {
-            try {
-                LOGGER.fine("request CRS decoding" + srs);
-                requestCRS = CRS.decode(srs);
-
-            } catch (FactoryException e) {
-                LOGGER.log(Level.FINER, e.getMessage(), e);
-                throw new RuntimeException(e);
-            }
-        }
-        /* System.out.println(requestCRS); */
-        for (TileMatrixSet matrix : capabilities.getMatrixes()) {
-
-            CoordinateReferenceSystem coordinateReferenceSystem = null;
-            try {
-                coordinateReferenceSystem = matrix.getCoordinateReferenceSystem();
-            } catch (FactoryException e) {
-                LOGGER.log(Level.FINER, e.getMessage(), e);
-            }
-            /* System.out.println("comparing "+coordinateReferenceSystem); */
-            // TODO: possible issues here if axis order is not the same
-            if (CRS.equalsIgnoreMetadata(requestCRS, coordinateReferenceSystem)) {// matching SRS
-                if (links.containsKey((matrix.getIdentifier()))) { // and available for this layer
-                    LOGGER.fine("selected matrix set:" + matrix.getIdentifier());
-                    setProperty(TILEMATRIXSET, matrix.getIdentifier());
-                    matrixSet = matrix;
-
-                    break;
-                }
-            }
-        }
-
-        if (matrixSet == null) {
-            // Just pick one!
-            LOGGER.warning("Failed to match the requested CRS (" + requestCRS.getName()
-                    + ") with any of the tile matrices!");
-            for (TileMatrixSet matrix : capabilities.getMatrixes()) {
-                if (links.containsKey((matrix.getIdentifier()))) { // and available for this layer
-                    LOGGER.fine("selected matrix set:" + matrix.getIdentifier());
-                    setProperty(TILEMATRIXSET, matrix.getIdentifier());
-                    matrixSet = matrix;
-
-                    break;
-                }
-            }
-            if (matrixSet == null) {
-                throw new ServiceException("Unable to find a matching TileMatrixSet for layer "
-                        + layer.getName() + " and SRS: " + requestCRS.getName());
-            }
-        }
-        // System.out.println("selected "+matrixSet.getCrs());
+        TileMatrixSet matrixSet = selectMatrixSet();
+        
         String requestUrl = onlineResource.toString();
         if (WMTSServiceType.REST.equals(type)) {
             String format = (String) getProperties().get("Format");
             if (format == null || format.isEmpty()) {
                 format = "image/png";
+                LOGGER.fine("Format not set, trying with " + format);
             }
             requestUrl = layer.getTemplate(format);
+            if(requestUrl == null) {
+                LOGGER.info("Template URL not available for format  " + format);
+                format = layer.getFormats().get(0);
+                if(LOGGER.isLoggable(Level.FINE)) {
+                    LOGGER.fine("Available formats: " + layer.getFormats() + " -- Selecting " + format);
+                }
+                requestUrl = layer.getTemplate(format);
+            }
         }
         WMTSService wmtsService = new WMTSService(requestUrl, type, layerString, styleString,
                 matrixSet, layer.getTileMatrixLinks().get(matrixSet.getIdentifier()).getLimits());
@@ -372,5 +328,63 @@ public abstract class AbstractGetTileRequest extends AbstractWMTSRequest
 //        }
 //
 //    }
+
+    private TileMatrixSet selectMatrixSet() throws ServiceException, RuntimeException {
+        TileMatrixSet matrixSet = null;
+
+        Map<String, TileMatrixSetLink> links = layer.getTileMatrixLinks();
+        CoordinateReferenceSystem requestCRS = getCrs();
+        LOGGER.fine("request CRS " + requestCRS.getName());
+        if (requestCRS == null) {
+            try {
+                LOGGER.fine("request CRS decoding" + srs);
+                requestCRS = CRS.decode(srs);
+
+            } catch (FactoryException e) {
+                LOGGER.log(Level.FINER, e.getMessage(), e);
+                throw new RuntimeException(e);
+            }
+        }
+        /* System.out.println(requestCRS); */
+        for (TileMatrixSet matrix : capabilities.getMatrixes()) {
+
+            CoordinateReferenceSystem matrixCRS = null;
+            try {
+                matrixCRS = matrix.getCoordinateReferenceSystem();
+            } catch (FactoryException e) {
+                LOGGER.log(Level.FINER, e.getMessage(), e);
+            }
+            /* System.out.println("comparing "+coordinateReferenceSystem); */
+            // TODO: possible issues here if axis order is not the same
+            if (CRS.equalsIgnoreMetadata(requestCRS, matrixCRS)) {// matching SRS
+                if (links.containsKey((matrix.getIdentifier()))) { // and available for this layer
+                    LOGGER.fine("selected matrix set:" + matrix.getIdentifier());
+                    setProperty(TILEMATRIXSET, matrix.getIdentifier());
+                    matrixSet = matrix;
+
+                    break;
+                }
+            }
+        }
+        if (matrixSet == null) {
+            // Just pick one!
+            LOGGER.warning("Failed to match the requested CRS (" + requestCRS.getName()
+                    + ") with any of the tile matrices!");
+            for (TileMatrixSet matrix : capabilities.getMatrixes()) {
+                if (links.containsKey((matrix.getIdentifier()))) { // available for this layer
+                    LOGGER.fine("defaulting matrix set:" + matrix.getIdentifier());
+                    setProperty(TILEMATRIXSET, matrix.getIdentifier());
+                    matrixSet = matrix;
+
+                    break;
+                }
+            }
+            if (matrixSet == null) {
+                throw new ServiceException("Unable to find a matching TileMatrixSet for layer "
+                        + layer.getName() + " and SRS: " + requestCRS.getName());
+            }
+        }
+        return matrixSet;
+    }
 
 }
