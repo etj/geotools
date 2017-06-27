@@ -21,7 +21,6 @@ import java.io.UnsupportedEncodingException;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -31,20 +30,20 @@ import java.util.logging.Logger;
 
 import org.geotools.data.ows.HTTPResponse;
 import org.geotools.data.ows.Response;
-import org.geotools.data.wmts.WMTSCapabilities;
-import org.geotools.data.wmts.WMTSLayer;
+import org.geotools.data.wmts.client.WMTSTileService;
+import org.geotools.data.wmts.client.WMTSTileFactory;
+import org.geotools.data.wmts.model.WMTSCapabilities;
+import org.geotools.data.wmts.model.WMTSLayer;
+import org.geotools.data.wmts.model.TileMatrixLimits;
+import org.geotools.data.wmts.model.TileMatrixSet;
+import org.geotools.data.wmts.model.TileMatrixSetLink;
+import org.geotools.data.wmts.model.WMTSServiceType;
 import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.geotools.ows.ServiceException;
 import org.geotools.referencing.CRS;
 import org.geotools.renderer.lite.RendererUtilities;
 import org.geotools.tile.Tile;
-import org.geotools.tile.TileService;
-import org.geotools.tile.impl.wmts.TileMatrixLimits;
-import org.geotools.tile.impl.wmts.TileMatrixSet;
-import org.geotools.tile.impl.wmts.TileMatrixSetLink;
-import org.geotools.tile.impl.wmts.WMTSService;
-import org.geotools.tile.impl.wmts.WMTSServiceType;
-import org.geotools.tile.impl.wmts.WMTSTileFactory;
+
 import org.geotools.util.logging.Logging;
 import org.opengis.referencing.FactoryException;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
@@ -227,9 +226,10 @@ public abstract class AbstractGetTileRequest extends AbstractWMTSRequest
                 requestUrl = layer.getTemplate(format);
             }
         }
-        WMTSService wmtsService = new WMTSService(requestUrl, type, layerString, styleString,
-                matrixSet, layer.getTileMatrixLinks().get(matrixSet.getIdentifier()).getLimits());
-        wmtsService.getDimensions().put(WMTSService.DIMENSION_TIME, requestedTime);
+
+        WMTSTileService wmtsService = new WMTSTileService(requestUrl, type, layer, styleString, matrixSet);
+        
+        wmtsService.getDimensions().put(WMTSTileService.DIMENSION_TIME, requestedTime);
 
 
         // zoomLevel = factory.getZoomLevel(zoom, wmtsService);
@@ -330,7 +330,7 @@ public abstract class AbstractGetTileRequest extends AbstractWMTSRequest
 //    }
 
     private TileMatrixSet selectMatrixSet() throws ServiceException, RuntimeException {
-        TileMatrixSet matrixSet = null;
+        TileMatrixSet retMatrixSet = null;
 
         Map<String, TileMatrixSetLink> links = layer.getTileMatrixLinks();
         CoordinateReferenceSystem requestCRS = getCrs();
@@ -346,45 +346,46 @@ public abstract class AbstractGetTileRequest extends AbstractWMTSRequest
             }
         }
         /* System.out.println(requestCRS); */
-        for (TileMatrixSet matrix : capabilities.getMatrixes()) {
+        for (TileMatrixSet matrixSet : capabilities.getMatrixSets()) {
 
             CoordinateReferenceSystem matrixCRS = null;
             try {
-                matrixCRS = matrix.getCoordinateReferenceSystem();
+                matrixCRS = matrixSet.getCoordinateReferenceSystem();
             } catch (FactoryException e) {
                 LOGGER.log(Level.FINER, e.getMessage(), e);
             }
             /* System.out.println("comparing "+coordinateReferenceSystem); */
             // TODO: possible issues here if axis order is not the same
             if (CRS.equalsIgnoreMetadata(requestCRS, matrixCRS)) {// matching SRS
-                if (links.containsKey((matrix.getIdentifier()))) { // and available for this layer
-                    LOGGER.fine("selected matrix set:" + matrix.getIdentifier());
-                    setProperty(TILEMATRIXSET, matrix.getIdentifier());
-                    matrixSet = matrix;
+                if (links.containsKey((matrixSet.getIdentifier()))) { // and available for this layer
+                    LOGGER.fine("selected matrix set:" + matrixSet.getIdentifier());
+                    setProperty(TILEMATRIXSET, matrixSet.getIdentifier());
+                    retMatrixSet = matrixSet;
 
                     break;
                 }
             }
         }
-        if (matrixSet == null) {
+        if (retMatrixSet == null) {
             // Just pick one!
             LOGGER.warning("Failed to match the requested CRS (" + requestCRS.getName()
                     + ") with any of the tile matrices!");
-            for (TileMatrixSet matrix : capabilities.getMatrixes()) {
+            for (TileMatrixSet matrix : capabilities.getMatrixSets()) {
                 if (links.containsKey((matrix.getIdentifier()))) { // available for this layer
                     LOGGER.fine("defaulting matrix set:" + matrix.getIdentifier());
                     setProperty(TILEMATRIXSET, matrix.getIdentifier());
-                    matrixSet = matrix;
+                    retMatrixSet = matrix;
 
                     break;
                 }
             }
-            if (matrixSet == null) {
+            if (retMatrixSet == null) {
                 throw new ServiceException("Unable to find a matching TileMatrixSet for layer "
                         + layer.getName() + " and SRS: " + requestCRS.getName());
             }
         }
-        return matrixSet;
+        return retMatrixSet;
     }
+
 
 }

@@ -14,7 +14,7 @@
  *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *    Lesser General Public License for more details.
  */
-package org.geotools.tile.impl.wmts;
+package org.geotools.data.wmts.model;
 
 import org.geotools.factory.GeoTools;
 import org.geotools.factory.Hints;
@@ -239,6 +239,7 @@ public class TileMatrix {
         if(parent != null) {
             try {
                 parsedCrs = parent.getCoordinateReferenceSystem();
+
             } catch (FactoryException e) {
                 Logger.getLogger(this.getClass().getName()).log(Level.INFO, "Can't parse CRS: " + e.getMessage(), e);
             }

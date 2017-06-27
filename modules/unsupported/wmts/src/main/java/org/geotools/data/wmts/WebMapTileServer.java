@@ -36,7 +36,8 @@ import org.geotools.geometry.GeneralEnvelope;
 import org.geotools.ows.ServiceException;
 import org.geotools.referencing.CRS;
 import org.geotools.tile.Tile;
-import org.geotools.tile.impl.wmts.WMTSServiceType;
+import org.geotools.data.wmts.model.WMTSServiceType;
+import org.geotools.data.wmts.model.WMTSCapabilities;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
 
 /**

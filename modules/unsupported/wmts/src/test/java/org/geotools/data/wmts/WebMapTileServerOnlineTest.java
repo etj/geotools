@@ -24,6 +24,8 @@ import java.util.Properties;
 import java.util.Set;
 
 import org.geotools.data.ows.Layer;
+import org.geotools.data.wmts.model.WMTSLayer;
+import org.geotools.data.wmts.model.WMTSCapabilities;
 import org.geotools.data.wmts.request.GetTileRequest;
 import org.geotools.geometry.GeneralEnvelope;
 import org.geotools.geometry.jts.ReferencedEnvelope;
@@ -31,6 +33,7 @@ import org.geotools.ows.ServiceException;
 import org.geotools.referencing.CRS;
 import org.geotools.test.OnlineTestCase;
 import org.geotools.tile.Tile;
+import org.junit.Test;
 import org.opengis.referencing.FactoryException;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
 
@@ -140,7 +143,7 @@ public class WebMapTileServerOnlineTest extends OnlineTestCase {
         }
     }
 
-    
+    @Test
     public void testIssueGetMapRequestWithSpacedLayerNames() throws Exception {
     /*    WebMapServer wms = new WebMapServer(serverWithSpacedLayerNamesURL);
 

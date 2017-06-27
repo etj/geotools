@@ -22,7 +22,7 @@ import java.net.URL;
 import org.geotools.data.ows.HTTPResponse;
 import org.geotools.data.ows.Response;
 import org.geotools.ows.ServiceException;
-import org.geotools.tile.impl.wmts.WMTSServiceType;
+import org.geotools.data.wmts.model.WMTSServiceType;
 
 /**
  * @author ian

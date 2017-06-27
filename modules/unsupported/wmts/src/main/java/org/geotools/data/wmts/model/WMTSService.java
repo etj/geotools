@@ -14,7 +14,7 @@
  *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *    Lesser General Public License for more details.
  */
-package org.geotools.data.wmts;
+package org.geotools.data.wmts.model;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,7 +36,10 @@ public class WMTSService extends Service {
      */
     public WMTSService(ServiceIdentificationType serviceType) {
 
-        setTitle(((LanguageStringType) serviceType.getTitle().get(0)).getValue());
+        String title = serviceType.getTitle().isEmpty() ?
+                "N/A" :
+                ((LanguageStringType) serviceType.getTitle().get(0)).getValue();
+        setTitle(title);
         setName(serviceType.getServiceType().getValue());
 
         List<String> retList = new ArrayList<>();

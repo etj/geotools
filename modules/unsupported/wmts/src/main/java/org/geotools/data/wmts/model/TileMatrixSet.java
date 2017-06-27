@@ -14,17 +14,15 @@
  *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *    Lesser General Public License for more details.
  */
-package org.geotools.tile.impl.wmts;
+package org.geotools.data.wmts.model;
 
 import java.util.ArrayList;
-import java.util.logging.Level;
+import org.geotools.data.ows.CRSEnvelope;
 
 import org.geotools.referencing.CRS;
 import org.opengis.referencing.FactoryException;
 import org.opengis.referencing.NoSuchAuthorityCodeException;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
-import org.w3c.dom.Element;
-import org.w3c.dom.NodeList;
 
 
 public class TileMatrixSet {
@@ -48,6 +46,8 @@ public class TileMatrixSet {
     private String identifier;
 
     private String crs;
+
+    private CRSEnvelope bbox;
 
     private ArrayList<TileMatrix> matrices = new ArrayList<>();
 
@@ -80,7 +80,7 @@ public class TileMatrixSet {
         if(crs.equalsIgnoreCase("epsg:900913")||crs.equalsIgnoreCase("urn:ogc:def:crs:EPSG::900913")) {
             return WEB_MERCATOR_CRS;
         }
-        
+
         return CRS.decode(crs);
     }
 
@@ -105,26 +105,34 @@ public class TileMatrixSet {
         return identifier;
     }
 
-    /**
-     * @param e
-     */
-    @Deprecated
-    public static TileMatrixSet parseTileMatrixSet(Element e) {
-        TileMatrixSet ret = new TileMatrixSet();
-        NodeList crs = e.getElementsByTagNameNS(OWS, "SupportedCRS");
-        ret.setCRS(crs.item(0).getTextContent());
-        NodeList id = e.getElementsByTagNameNS(OWS, "Identifier");
-        ret.setIdentifier(id.item(0).getTextContent());
-        NodeList matrices = e.getElementsByTagName("TileMatrix");
-
-        for (int i = 0; i < matrices.getLength(); i++) {
-            TileMatrix tm = TileMatrix.parse((Element) matrices.item(i));
-            tm.setParent(ret);
-            ret.addMatrix(tm);
-        }
-
-        return ret;
+    public CRSEnvelope getBbox() {
+        return bbox;
     }
+
+    public void setBbox(CRSEnvelope bbox) {
+        this.bbox = bbox;
+    }
+
+//    /**
+//     * @param e
+//     */
+//    @Deprecated
+//    public static TileMatrixSet parseTileMatrixSet(Element e) {
+//        TileMatrixSet ret = new TileMatrixSet();
+//        NodeList crs = e.getElementsByTagNameNS(OWS, "SupportedCRS");
+//        ret.setCRS(crs.item(0).getTextContent());
+//        NodeList id = e.getElementsByTagNameNS(OWS, "Identifier");
+//        ret.setIdentifier(id.item(0).getTextContent());
+//        NodeList matrices = e.getElementsByTagName("TileMatrix");
+//
+//        for (int i = 0; i < matrices.getLength(); i++) {
+//            TileMatrix tm = TileMatrix.parse((Element) matrices.item(i));
+//            tm.setParent(ret);
+//            ret.addMatrix(tm);
+//        }
+//
+//        return ret;
+//    }
 
     public String toString() {
         StringBuilder sb = new StringBuilder();

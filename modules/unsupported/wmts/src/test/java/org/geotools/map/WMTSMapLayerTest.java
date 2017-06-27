@@ -24,7 +24,7 @@ import java.awt.image.BufferedImage;
 import java.net.URL;
 
 import org.geotools.data.ows.Layer;
-import org.geotools.data.wmts.WMTSLayer;
+import org.geotools.data.wmts.model.WMTSLayer;
 import org.geotools.data.wmts.WebMapTileServer;
 import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.geotools.referencing.CRS;

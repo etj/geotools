@@ -14,8 +14,10 @@
  *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *    Lesser General Public License for more details.
  */
-package org.geotools.data.wmts;
+package org.geotools.data.wmts.model;
 
+import org.geotools.data.wmts.model.WMTSLayer;
+import org.geotools.data.wmts.model.WMTSCapabilities;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
@@ -35,8 +37,10 @@ import org.xml.sax.SAXException;
 
 import junit.framework.TestCase;
 import net.opengis.wmts.v_1.CapabilitiesType;
-import org.geotools.tile.impl.wmts.TileMatrixLimits;
-import org.geotools.tile.impl.wmts.TileMatrixSetLink;
+import org.geotools.data.wmts.WMTSSpecification;
+import org.geotools.data.wmts.WebMapTileServer;
+import org.geotools.data.wmts.model.TileMatrixLimits;
+import org.geotools.data.wmts.model.TileMatrixSetLink;
 
 /**
  *
@@ -66,7 +70,7 @@ public class WMTSCapabilitiesTest extends TestCase {
 
     public void testCreateParser() throws Exception {
         WMTSCapabilities capabilities = createCapabilities(
-                "/GeoServer_2.2.x/1.0.0/GetCapabilities.xml");
+                "GeoServer_2.2.x/1.0.0/GetCapabilities.xml");
         try {
             assertEquals("1.0.0", capabilities.getVersion());
             assertEquals("OGC WMTS", capabilities.getService().getName());
@@ -127,7 +131,7 @@ public class WMTSCapabilitiesTest extends TestCase {
     }
 
     public void testParser2() throws Exception {
-        WMTSCapabilities capabilities = createCapabilities("WMTSCapabilities.admin_ch.xml");
+        WMTSCapabilities capabilities = createCapabilities("admin_ch.getcapa.xml");
         try {
             assertEquals("1.0.0", capabilities.getVersion());
 
@@ -150,17 +154,79 @@ public class WMTSCapabilitiesTest extends TestCase {
             Layer[] layers = (Layer[]) capabilities.getLayerList()
                     .toArray(new Layer[capabilities.getLayerList().size()]);
 
-            Layer l0 = layers[0];
+            WMTSLayer l0 = (WMTSLayer)layers[0];
 
             assertEquals("ch.are.agglomerationen_isolierte_staedte", l0.getName());
             assertNull(l0.getParent());
-
             assertTrue(l0.getSrs().contains("urn:ogc:def:crs:EPSG::2056")); // case should not matter
             assertTrue(l0.getSrs().contains("EPSG:2056")); // case should not matter
 
             assertNotNull("Missing dimensions", l0.getDimensions());
             assertEquals("Bad dimensions size", 1, l0.getDimensions().size());
-            assertEquals("Bad dimension name", "Time", l0.getDimensions().keySet().iterator().next());
+            String dimName = l0.getDimensions().keySet().iterator().next();
+            assertTrue("Bad dimension name (Time!="+dimName+")", "Time".equalsIgnoreCase(dimName));
+
+            assertNotNull(l0.getTileMatrixLinks());
+            assertEquals(1,l0.getTileMatrixLinks().keySet().size());
+            assertEquals("2056_26", l0.getTileMatrixLinks().keySet().iterator().next());
+            assertEquals("2056_26", l0.getTileMatrixLinks().values().iterator().next().getIdentifier());
+            assertEquals(0, l0.getTileMatrixLinks().values().iterator().next().getLimits().size());
+
+            assertEquals(12, capabilities.getMatrixSets().size());
+            assertEquals("2056_17", capabilities.getMatrixSets().get(0).getIdentifier());
+            assertEquals(18, capabilities.getMatrixSets().get(0).getMatrices().size());
+            assertEquals(14285750.5715, capabilities.getMatrixSets().get(0).getMatrices().get(0).getDenominator());
+
+            CRSEnvelope bbox = (CRSEnvelope) layers[1].getBoundingBoxes().get("EPSG:4326");
+            assertNotNull(bbox);
+
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            if ((e.getMessage() != null) && e.getMessage().indexOf("timed out") > 0) {
+                System.err.println("Unable to test - timed out: " + e);
+            } else {
+                throw (e);
+            }
+        }
+    }
+
+    public void testParser3() throws Exception {
+        WMTSCapabilities capabilities = createCapabilities("nasa.getcapa.xml");
+        try {
+            assertEquals("1.0.0", capabilities.getVersion());
+
+            WMTSService service = (WMTSService)capabilities.getService();
+            assertEquals("OGC WMTS", service.getName());
+            assertEquals("NASA Global Imagery Browse Services for EOSDIS", service.getTitle());
+
+            String[] keywordList = service.getKeywordList();
+            assertNotNull(keywordList);
+            assertEquals("World", keywordList[0]);
+            assertEquals("Global", keywordList[1]);
+
+            WMTSRequest request = capabilities.getRequest();
+
+            OperationType getTile = request.getGetTile();
+            assertNotNull(getTile);
+
+            assertEquals(519,capabilities.getLayerList().size());
+
+            Layer[] layers = (Layer[]) capabilities.getLayerList()
+                    .toArray(new Layer[capabilities.getLayerList().size()]);
+
+            Layer l0 = layers[0];
+
+            assertEquals("AMSR2_Snow_Water_Equivalent", l0.getName());
+            assertNull(l0.getParent());
+            
+            //assertTrue(l0.getSrs().contains("urn:ogc:def:crs:OGC:2:84")); // case should not matter
+            assertTrue(l0.getSrs().contains("CRS:84"));
+
+            assertNotNull("Missing dimensions", l0.getDimensions());
+            assertEquals("Bad dimensions size", 1, l0.getDimensions().size());
+            String dimName = l0.getDimensions().keySet().iterator().next();
+            assertTrue("Bad dimension name (Time!="+dimName+")", "Time".equalsIgnoreCase(dimName));
 
             CRSEnvelope bbox = (CRSEnvelope) layers[1].getBoundingBoxes().get("EPSG:4326");
             assertNotNull(bbox);
@@ -240,7 +306,7 @@ public class WMTSCapabilitiesTest extends TestCase {
 
     protected WMTSCapabilities createCapabilities(String capFile) throws Exception {
         try {
-            File getCaps = TestData.file(this, capFile);
+            File getCaps = TestData.file(null, capFile);
             assertNotNull(getCaps);
 
             Parser parser = new Parser(new WMTSConfiguration());

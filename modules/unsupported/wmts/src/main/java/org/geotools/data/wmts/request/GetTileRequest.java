@@ -21,7 +21,7 @@ import org.geotools.data.ows.Layer;
 
 import org.geotools.data.ows.Request;
 import org.geotools.data.ows.StyleImpl;
-import org.geotools.data.wmts.WMTSLayer;
+import org.geotools.data.wmts.model.WMTSLayer;
 import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.geotools.ows.ServiceException;
 import org.geotools.tile.Tile;

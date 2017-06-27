@@ -30,7 +30,6 @@ import org.opengis.referencing.crs.CoordinateReferenceSystem;
 import org.opengis.referencing.operation.MathTransform;
 
 import com.vividsolutions.jts.geom.Coordinate;
-import org.geotools.tile.impl.wmts.TileMatrixSet;
 import org.opengis.referencing.FactoryException;
 import org.opengis.referencing.operation.TransformException;
 
@@ -127,11 +126,10 @@ public class ScaleZoomLevelMatcher {
 
     public static ScaleZoomLevelMatcher createMatcher(
             ReferencedEnvelope requestExtent,
-            TileMatrixSet matrixSet,
+            CoordinateReferenceSystem crsTiles,
             double scale) throws FactoryException, TransformException {
 
         CoordinateReferenceSystem crsMap = requestExtent.getCoordinateReferenceSystem();
-        CoordinateReferenceSystem crsTiles = matrixSet.getCoordinateReferenceSystem();
 
         // Transformation: MapCrs -> TileCrs 
         MathTransform transformMapToTile = CRS.findMathTransform(crsMap, crsTiles);

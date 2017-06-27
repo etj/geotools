@@ -14,8 +14,9 @@
  *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *    Lesser General Public License for more details.
  */
-package org.geotools.tile.impl.wmts;
+package org.geotools.data.wmts.client;
 
+import org.geotools.data.wmts.model.TileMatrix;
 import org.geotools.tile.impl.ZoomLevel;
 
 /**
@@ -24,12 +25,12 @@ import org.geotools.tile.impl.ZoomLevel;
  */
 public class WMTSZoomLevel extends ZoomLevel {
 
-    private WMTSService service;
+    private final WMTSTileService service;
 
     /**
      * @param zoomLevel
      */
-    public WMTSZoomLevel(int zoomLevel, WMTSService service) {
+    public WMTSZoomLevel(int zoomLevel, WMTSTileService service) {
         //super(zoomLevel);
         this.service = service;
         setZoomLevel(zoomLevel);

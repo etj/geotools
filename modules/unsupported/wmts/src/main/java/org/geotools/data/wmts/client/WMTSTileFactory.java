@@ -14,8 +14,10 @@
  *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *    Lesser General Public License for more details.
  */
-package org.geotools.tile.impl.wmts;
+package org.geotools.data.wmts.client;
 
+import org.geotools.data.wmts.model.TileMatrixLimits;
+import org.geotools.data.wmts.model.TileMatrix;
 import java.util.List;
 import java.util.logging.Logger;
 
@@ -58,9 +60,9 @@ public class WMTSTileFactory extends TileFactory {
     public Tile findTileAtCoordinate(double lon, double lat, ZoomLevel zoomLevel,
             TileService service) {
         WMTSZoomLevel zl = (WMTSZoomLevel) zoomLevel;
-        TileMatrix tileMatrix = ((WMTSService) service).getMatrixSet().getMatrices()
+        TileMatrix tileMatrix = ((WMTSTileService) service).getMatrixSet().getMatrices()
                 .get(zl.getZoomLevel());
-        List<TileMatrixLimits> limits = ((WMTSService) service).getLimits();
+        List<TileMatrixLimits> limits = ((WMTSTileService) service).getLimits();
         TileMatrixLimits tileMatrixLimits;
         if (limits != null && zl.getZoomLevel() < limits.size()) {
             tileMatrixLimits = limits.get(zl.getZoomLevel());
@@ -68,8 +70,8 @@ public class WMTSTileFactory extends TileFactory {
             tileMatrixLimits = new TileMatrixLimits();
             tileMatrixLimits.setMinCol(0L);
             tileMatrixLimits.setMinRow(0L);
-            tileMatrixLimits.setMaxCol(tileMatrix.matrixWidth);
-            tileMatrixLimits.setMaxRow(tileMatrix.matrixHeight);
+            tileMatrixLimits.setMaxCol(tileMatrix.getMatrixWidth());
+            tileMatrixLimits.setMaxRow(tileMatrix.getMatrixHeight());
         }
 
 
@@ -92,15 +94,15 @@ public class WMTSTileFactory extends TileFactory {
         long yTile = (int) Math.floor((tileMatrixMaxY - lat) / tileSpanY + epsilon);
         // to avoid requesting out-of-range tiles
 
-        if (xTile >= tileMatrixLimits.maxcol)
-            xTile = tileMatrixLimits.maxcol - 1;
-        if (yTile >= tileMatrixLimits.maxrow)
-            yTile = tileMatrixLimits.maxrow - 1;
+        if (xTile >= tileMatrixLimits.getMaxcol())
+            xTile = tileMatrixLimits.getMaxcol() - 1;
+        if (yTile >= tileMatrixLimits.getMaxrow())
+            yTile = tileMatrixLimits.getMaxrow() - 1;
 
-        if (xTile < tileMatrixLimits.mincol)
-            xTile = tileMatrixLimits.mincol;
-        if (yTile < tileMatrixLimits.minrow)
-            yTile = tileMatrixLimits.minrow;
+        if (xTile < tileMatrixLimits.getMincol())
+            xTile = tileMatrixLimits.getMincol();
+        if (yTile < tileMatrixLimits.getMinrow())
+            yTile = tileMatrixLimits.getMinrow();
 
         LOGGER.fine("findTile: (lon,lat)=("+lon+","+lat+")  (col,row)=" + xTile + ", " + yTile + " zoom:" + zoomLevel.getZoomLevel());
         return new WMTSTile((int) xTile, (int) yTile, zoomLevel, service);
@@ -108,7 +110,7 @@ public class WMTSTileFactory extends TileFactory {
 
     @Override
     public ZoomLevel getZoomLevel(int zoomLevel, TileService service) {
-        return new WMTSZoomLevel(zoomLevel, (WMTSService) service);
+        return new WMTSZoomLevel(zoomLevel, (WMTSTileService) service);
     }
 
     @Override
@@ -131,8 +133,8 @@ public class WMTSTileFactory extends TileFactory {
      */
     public static ReferencedEnvelope getExtentFromTileName(WMTSTileIdentifier tileIdentifier,
             TileService service) {
-        WMTSZoomLevel zl = new WMTSZoomLevel(tileIdentifier.getZ(), (WMTSService) service);
-        TileMatrix tileMatrix = ((WMTSService) service).getMatrixSet().getMatrices()
+        WMTSZoomLevel zl = new WMTSZoomLevel(tileIdentifier.getZ(), (WMTSTileService) service);
+        TileMatrix tileMatrix = ((WMTSTileService) service).getMatrixSet().getMatrices()
                 .get(zl.getZoomLevel());
 
         CoordinateReferenceSystem crs = tileMatrix.getCrs();
@@ -177,7 +179,7 @@ public class WMTSTileFactory extends TileFactory {
     private static double getPixelSpan(TileMatrix tileMatrix) {
         CoordinateSystem coordinateSystem = tileMatrix.getCrs().getCoordinateSystem();
         Unit<?> unit = coordinateSystem.getAxis(0).getUnit();
-        double pixelSpan = tileMatrix.denominator * PixelSizeMeters;// now divide by meters per unit!
+        double pixelSpan = tileMatrix.getDenominator() * PixelSizeMeters;// now divide by meters per unit!
         if (unit.equals(NonSI.DEGREE_ANGLE)) {
             /*// use the length of a degree at the equator = 60 nautical miles!
             unit = NonSI.NAUTICAL_MILE;

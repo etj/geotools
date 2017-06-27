@@ -3,7 +3,7 @@
  *    http://geotools.org
  *
  *    (C) 2004-2008, Open Source Geospatial Foundation (OSGeo)
- *    
+ *
  *    This library is free software; you can redistribute it and/or
  *    modify it under the terms of the GNU Lesser General Public
  *    License as published by the Free Software Foundation;
@@ -14,7 +14,7 @@
  *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *    Lesser General Public License for more details.
  */
-package org.geotools.data.wmts;
+package org.geotools.data.wmts.model;
 
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -37,11 +37,6 @@ import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.geotools.referencing.CRS;
 import org.geotools.referencing.crs.AbstractSingleCRS;
 import org.geotools.referencing.crs.DefaultGeographicCRS;
-import org.geotools.tile.impl.wmts.TileMatrix;
-import org.geotools.tile.impl.wmts.TileMatrixLimits;
-import org.geotools.tile.impl.wmts.TileMatrixSet;
-import org.geotools.tile.impl.wmts.TileMatrixSetLink;
-import org.geotools.tile.impl.wmts.WMTSServiceType;
 import org.opengis.referencing.FactoryException;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
 import org.opengis.referencing.cs.AxisDirection;
@@ -49,6 +44,7 @@ import org.opengis.referencing.operation.TransformException;
 
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.GeometryFactory;
+import java.util.logging.Level;
 
 import net.opengis.ows11.WGS84BoundingBoxType;
 import net.opengis.ows11.AllowedValuesType;
@@ -73,6 +69,7 @@ import net.opengis.wmts.v_1.TileMatrixType;
 import net.opengis.wmts.v_1.URLTemplateType;
 import org.geotools.data.wms.xml.Dimension;
 import org.geotools.data.wms.xml.Extent;
+import org.opengis.referencing.crs.GeographicCRS;
 
 /**
  * Represents a base object for a WMTS getCapabilities response.
@@ -103,13 +100,14 @@ public class WMTSCapabilities extends Capabilities {
 
     CapabilitiesType caps;
 
-    private Map<String, Layer> layerMap = new HashMap<>();
+    private Map<String, WMTSLayer> layerMap = new HashMap<>();
 
     private List<Layer> layers = new ArrayList<Layer>(); // cache
 
     private String[] exceptions = new String[0];
 
     private List<TileMatrixSet> matrixes = new ArrayList<>();
+    private Map<String, TileMatrixSet> matrixSetMap = new HashMap<>();
 
     private WMTSServiceType type;
 
@@ -128,7 +126,7 @@ public class WMTSCapabilities extends Capabilities {
                 LayerType layerType = (LayerType) l;
 
                 String title = ((LanguageStringType) layerType.getTitle().get(0))
-                        .getValue().toString();
+                        .getValue();
 
                 WMTSLayer layer = new WMTSLayer(title);
                 layer.setName(layerType.getIdentifier().getValue());
@@ -161,15 +159,13 @@ public class WMTSCapabilities extends Capabilities {
                 EList<BoundingBoxType> bboxes = layerType.getBoundingBox();
                 Map<String, CRSEnvelope> boundingBoxes = new HashMap<>();
                 for (BoundingBoxType bbox : bboxes) {
-                    boundingBoxes.put(bbox.getCrs(),
-                            new CRSEnvelope(bbox.getCrs(),
-                                    ((Double) bbox.getLowerCorner().get(0)).doubleValue(),
-                                    ((Double) bbox.getLowerCorner().get(1)).doubleValue(),
-                                    ((Double) bbox.getUpperCorner().get(0)).doubleValue(),
-                                    ((Double) bbox.getUpperCorner().get(1)).doubleValue()));
+                    boundingBoxes.put(bbox.getCrs(), bbox2bbox(bbox));
                 }
-                WGS84BoundingBoxType wgsBBox = (WGS84BoundingBoxType) layerType
-                        .getWGS84BoundingBox().get(0);
+
+                WGS84BoundingBoxType wgsBBox = null;
+                if(! layerType .getWGS84BoundingBox().isEmpty()) {
+                    wgsBBox = (WGS84BoundingBoxType) layerType .getWGS84BoundingBox().get(0);
+                }
                 if (wgsBBox != null) {
                     int y;
                     int x;
@@ -192,6 +188,7 @@ public class WMTSCapabilities extends Capabilities {
                                     ((Double) wgsBBox.getUpperCorner().get(y)).doubleValue()));
 
                     layer.setLatLonBoundingBox(boundingBoxes.get("CRS:84"));
+
 
                 }
                 layer.setBoundingBoxes(boundingBoxes);
@@ -238,6 +235,10 @@ public class WMTSCapabilities extends Capabilities {
             TileMatrixSet matrixSet = new TileMatrixSet();
             matrixSet.setCRS(tm.getSupportedCRS());
             matrixSet.setIdentifier(tm.getIdentifier().getValue());
+            if(tm.getBoundingBox() != null) {
+                matrixSet.setBbox(bbox2bbox(tm.getBoundingBox()));
+            }
+
             for (TileMatrixType mat : tm.getTileMatrix()) {
                 TileMatrix matrix = new TileMatrix();
 
@@ -258,7 +259,10 @@ public class WMTSCapabilities extends Capabilities {
                 matrixSet.addMatrix(matrix);
             }
             matrixes.add(matrixSet);
+            matrixSetMap.put(matrixSet.getIdentifier(), matrixSet);
         }
+
+
 
         // set layer SRS - this comes from the tile matrix link
         Set<String> srs = new TreeSet<>();
@@ -277,14 +281,60 @@ public class WMTSCapabilities extends Capabilities {
 
             srs.add(tms.getCrs());
         }
+
+
         for (Layer l : layers) {
             WMTSLayer wmtsLayer = (WMTSLayer) l;
             Map<String, TileMatrixSetLink> tileMatrixLinks = wmtsLayer.getTileMatrixLinks();
+
+            if(wmtsLayer.getLatLonBoundingBox() != null) {
+                ReferencedEnvelope wgs84Env = new ReferencedEnvelope(wmtsLayer.getLatLonBoundingBox());
+                wmtsLayer.getBoundingBoxes().put("EPSG:4326", new CRSEnvelope(wgs84Env));
+            } else {
+                // if the layer does not provide wgs84bbox, let's assume a bbox from the tilematrixset
+                for (TileMatrixSetLink tmsLink : tileMatrixLinks.values()) {
+                    TileMatrixSet tms = matrixSetMap.get(tmsLink.getIdentifier());
+                    if(tms.getBbox() != null) {
+                        // Take the first good bbox
+                        // TODO: refer a bbox which is natively wgs84
+                        ReferencedEnvelope re = new ReferencedEnvelope(tms.getBbox());
+                        try {
+                            ReferencedEnvelope wgs84re = re.transform(CRS84, true);
+                            wmtsLayer.setLatLonBoundingBox(new CRSEnvelope(wgs84re));
+                            break;
+                        } catch (Exception ex) {
+                            // the RE can't be projected on WGS84, so let's try another one
+                            LOGGER.fine("Can't use " + tms.getIdentifier() +" for bbox");
+                            continue;
+                        }
+                    }
+                }
+
+                if(wmtsLayer.getLatLonBoundingBox() == null) {
+                    // We did not find any good bbox
+                    LOGGER.warning("No good BBOX found for layer " + l.getName());
+                    throw new RuntimeException("No good BBOX found for layer " + l.getName()); // todo: find a proper exception type
+                }
+            }
+
             ReferencedEnvelope wgs84Env = new ReferencedEnvelope(wmtsLayer.getLatLonBoundingBox());
-            wmtsLayer.getBoundingBoxes().put("EPSG:4326", new CRSEnvelope(wgs84Env));
-            for (TileMatrixSetLink tms : tileMatrixLinks.values()) {
-                CoordinateReferenceSystem tmsCRS = names.get(tms.getIdentifier());
+
+            // add a bbox for every CRS
+            for (TileMatrixSetLink tmsLink : tileMatrixLinks.values()) {
+                CoordinateReferenceSystem tmsCRS = names.get(tmsLink.getIdentifier());
                 wmtsLayer.setPreferredCRS(tmsCRS); // the preferred crs is just an arbitrary one?
+                String crsCode = tmsCRS.getName().getCode();
+
+                if(wmtsLayer.getBoundingBoxes().containsKey(crsCode)) {
+                    LOGGER.fine("Bbox for " + crsCode + " already exists for layer " + l.getName());
+                    continue;
+                }
+
+                TileMatrixSet tms = matrixSetMap.get(tmsLink.getIdentifier());
+                if(tms.getBbox() != null) {
+                    wmtsLayer.getBoundingBoxes().put(crsCode, tms.getBbox());
+                }
+
                 // add bboxes
                 try {
                     // make safe to CRS bounds
@@ -294,15 +344,10 @@ public class WMTSCapabilities extends Capabilities {
 //                            new CRSEnvelope(safeEnv.transform(tmsCRS, true)));
 
                     // making bbox safe may restrict it too much: let's trust in the declaration
-                    wmtsLayer.getBoundingBoxes().put(
-                            tmsCRS.getName().getCode(),
-                            new CRSEnvelope(wgs84Env.transform(tmsCRS, true)));
-
-
+                    wmtsLayer.getBoundingBoxes().put(crsCode, new CRSEnvelope(wgs84Env.transform(tmsCRS, true)));
                     wmtsLayer.addSRS(tmsCRS);
                 } catch (TransformException | FactoryException e) {
-                    // TODO Auto-generated catch block
-                    e.printStackTrace();
+                    LOGGER.info("Not adding CRS " + crsCode + " for layer " + l.getName());
                 }
             }
         }
@@ -336,7 +381,7 @@ public class WMTSCapabilities extends Capabilities {
                                         ValueType vt = (ValueType) v;
                                         if (vt.getValue().equalsIgnoreCase("KVP")) {
                                             setType(WMTSServiceType.KVP);
-                                        } else if (vt.getValue().equalsIgnoreCase("REST")) {
+                                        } else if (vt.getValue().equalsIgnoreCase("REST") || vt.getValue().equalsIgnoreCase("RESTful")) {
                                             setType(WMTSServiceType.REST);
                                         }
                                     }
@@ -359,7 +404,7 @@ public class WMTSCapabilities extends Capabilities {
                                         ValueType vt = (ValueType) v;
                                         if (vt.getValue().equalsIgnoreCase("KVP")) {
                                             setType(WMTSServiceType.KVP);
-                                        } else if (vt.getValue().equalsIgnoreCase("REST")) {
+                                        } else if (vt.getValue().equalsIgnoreCase("REST") || vt.getValue().equalsIgnoreCase("RESTful")) {
                                             setType(WMTSServiceType.REST);
                                         }
                                     }
@@ -403,7 +448,7 @@ public class WMTSCapabilities extends Capabilities {
      * Access a flat view of the layers available in the WMS.
      * <p>
      * The information available here is the same as doing a top down walk of all the layers available via getLayer().
-     * 
+     *
      * @return List of all available layers
      */
     public List<Layer> getLayerList() {
@@ -463,22 +508,34 @@ public class WMTSCapabilities extends Capabilities {
     /**
      * @return the matrixes
      */
-    public List<TileMatrixSet> getMatrixes() {
+    public List<TileMatrixSet> getMatrixSets() {
         return matrixes;
     }
 
     /**
      * @param matrixes the matrixes to set
      */
-    public void setMatrixes(List<TileMatrixSet> matrixes) {
+    public void setMatrixSets(List<TileMatrixSet> matrixes) {
         this.matrixes = matrixes;
     }
 
+    public TileMatrixSet getMatrixSet(String identifier) {
+        return matrixSetMap.get(identifier);
+    }
     /**
      * @param string
      * @return
      */
-    public Layer getLayer(String name) {
+    public WMTSLayer getLayer(String name) {
         return layerMap.get(name);
+    }
+
+    public static CRSEnvelope bbox2bbox(BoundingBoxType bbox) {
+
+        return new CRSEnvelope(bbox.getCrs(),
+                ((Double) bbox.getLowerCorner().get(0)).doubleValue(),
+                ((Double) bbox.getLowerCorner().get(1)).doubleValue(),
+                ((Double) bbox.getUpperCorner().get(0)).doubleValue(),
+                ((Double) bbox.getUpperCorner().get(1)).doubleValue());
     }
 }

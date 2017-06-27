@@ -7,7 +7,7 @@ import java.net.URL;
 import org.geotools.data.FileDataStore;
 import org.geotools.data.FileDataStoreFinder;
 import org.geotools.data.simple.SimpleFeatureSource;
-import org.geotools.data.wmts.WMTSLayer;
+import org.geotools.data.wmts.model.WMTSLayer;
 import org.geotools.data.wmts.WebMapTileServer;
 import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.geotools.map.FeatureLayer;

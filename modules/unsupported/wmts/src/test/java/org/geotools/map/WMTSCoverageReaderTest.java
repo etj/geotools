@@ -29,9 +29,8 @@ import java.util.Set;
 import javax.xml.parsers.ParserConfigurationException;
 import net.opengis.wmts.v_1.CapabilitiesType;
 import org.apache.commons.io.IOUtils;
-import org.geotools.data.wmts.WMTSCapabilities;
-
-import org.geotools.data.wmts.WMTSLayer;
+import org.geotools.data.wmts.model.WMTSCapabilities;
+import org.geotools.data.wmts.model.WMTSLayer;
 import org.geotools.data.wmts.WebMapTileServer;
 import org.geotools.data.wmts.request.GetTileRequest;
 import org.geotools.geometry.jts.ReferencedEnvelope;
@@ -40,6 +39,7 @@ import org.geotools.referencing.CRS;
 import org.geotools.tile.Tile;
 import org.geotools.wmts.WMTSConfiguration;
 import org.geotools.xml.Parser;
+
 import org.junit.Test;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
@@ -51,8 +51,8 @@ import org.xml.sax.SAXException;
 public class WMTSCoverageReaderTest {
 
 
-    private final static String KVP_CAPA_RESOURCENAME = "getcapa_kvp.xml";
-    private final static String REST_CAPA_RESOURCENAME = "org/geotools/data/wmts/test-data/WMTSCapabilities.admin_ch.xml";
+    private final static String KVP_CAPA_RESOURCENAME = "test-data/getcapa_kvp.xml";
+    private final static String REST_CAPA_RESOURCENAME = "test-data/admin_ch.getcapa.xml";
 
     @Test
     public void testRESTInitMapRequest() throws Exception {

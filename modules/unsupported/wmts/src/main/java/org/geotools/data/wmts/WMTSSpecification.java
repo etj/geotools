@@ -25,11 +25,12 @@ import org.geotools.data.ows.GetCapabilitiesRequest;
 import org.geotools.data.ows.HTTPResponse;
 import org.geotools.data.ows.Response;
 import org.geotools.data.ows.Specification;
+import org.geotools.data.wmts.model.WMTSCapabilities;
+import org.geotools.data.wmts.model.WMTSServiceType;
 import org.geotools.data.wmts.request.AbstractGetTileRequest;
 import org.geotools.data.wmts.response.GetTileResponse;
 import org.geotools.data.wmts.response.WMTSGetCapabilitiesResponse;
 import org.geotools.ows.ServiceException;
-import org.geotools.tile.impl.wmts.WMTSServiceType;
 
 /**
  * @author ian
@@ -64,7 +65,7 @@ public class WMTSSpecification extends Specification {
 
     }
 
-    static public class GetTileRequest extends AbstractGetTileRequest{
+    static public class GetTileRequest extends AbstractGetTileRequest {
 
         /**
          * @param onlineResource
@@ -130,7 +131,7 @@ public class WMTSSpecification extends Specification {
         }
 
         @Override
-        public Response createResponse(HTTPResponse httpResponse) throws ServiceException,
+        public WMTSGetCapabilitiesResponse createResponse(HTTPResponse httpResponse) throws ServiceException,
                 IOException {
             return new WMTSGetCapabilitiesResponse(httpResponse, hints);
         }

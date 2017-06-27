@@ -43,8 +43,6 @@ import org.geotools.tile.impl.WebMercatorZoomLevel;
 import org.geotools.tile.impl.osm.OSMService;
 import org.geotools.tile.impl.osm.OSMTile;
 import org.geotools.tile.impl.osm.OSMTileIdentifier;
-import org.geotools.tile.impl.wmts.WMTSService;
-import org.geotools.tile.impl.wmts.WMTSServiceType;
 import org.opengis.referencing.FactoryException;
 import org.opengis.referencing.operation.TransformException;
 
@@ -100,9 +98,9 @@ public class TileViewer {
         /*String baseURL = "http://raspberrypi:9000/service?REQUEST=GetCapabilities&SERVICE=WMTS";
         TileService service = new WMTSService("states", baseURL, "states", "webmercator",WMTSServiceType.KVP);*/
         
-        String baseURL = "http://raspberrypi:8080/geoserver/gwc/service/wmts?REQUEST=GetCapabilities";
-        TileService service = new WMTSService("states", baseURL, "topp:states", "EPSG:900913",WMTSServiceType.KVP, null);
-        map.addLayer(new AsyncTileLayer(service));
+//        String baseURL = "http://raspberrypi:8080/geoserver/gwc/service/wmts?REQUEST=GetCapabilities";
+//        TileService service = new WMTSService("states", baseURL, "topp:states", "EPSG:900913",WMTSServiceType.KVP, null);
+//        map.addLayer(new AsyncTileLayer(service));
         // createTestCoverageLayer(map);
 
         if (shapeFilename != null && shapeFilename.endsWith(".shp")) {

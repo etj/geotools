@@ -3,7 +3,6 @@ package org.geotools.wmts.bindings;
 
 import org.geotools.wmts.WMTS;
 import org.geotools.xml.*;
-import org.geotools.xml.AbstractSimpleBinding;
 
 import net.opengis.ows11.CodeType;
 import net.opengis.ows11.DomainMetadataType;
@@ -117,7 +116,7 @@ public class DimensionBinding extends AbstractComplexBinding {
 	    dimension.setDefault((String) node.getChildValue("Default"));
 	    dimension.setIdentifier((CodeType) node.getChildValue("Identifier"));
 	    dimension.setUnitSymbol((String) node.getChildValue("UnitSymbol", null));
-	    dimension.setUOM((DomainMetadataType) node.getChild("UOM"));
+            //dimension.setUOM((DomainMetadataType) node.getChildValue("UOM"));
 	    dimension.getValue().addAll(node.getChildValues("Value"));
 	    return dimension;
 	}

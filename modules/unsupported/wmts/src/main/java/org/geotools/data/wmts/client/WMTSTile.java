@@ -14,8 +14,9 @@
  *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *    Lesser General Public License for more details.
  */
-package org.geotools.tile.impl.wmts;
+package org.geotools.data.wmts.client;
 
+import org.geotools.data.wmts.model.WMTSServiceType;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
@@ -57,12 +58,12 @@ public class WMTSTile extends Tile {
 
     WMTSServiceType type = WMTSServiceType.REST;
 
-    private WMTSService service;
+    private WMTSTileService service;
 
 
     public WMTSTile(int x, int y, ZoomLevel zoomLevel, TileService service) {
         this(new WMTSTileIdentifier(x, y, zoomLevel, service.getName()), service);
-        this.service = (WMTSService) service;
+        this.service = (WMTSTileService) service;
         setType(this.service.getType());
     }
 
@@ -73,7 +74,7 @@ public class WMTSTile extends Tile {
     public WMTSTile(WMTSTileIdentifier tileIdentifier, TileService service) {
         super(tileIdentifier, WMTSTileFactory.getExtentFromTileName(tileIdentifier, service),
                 DEFAULT_TILE_SIZE);
-        this.service = (WMTSService) service;
+        this.service = (WMTSTileService) service;
         setType(this.service.getType());
     }
 
@@ -117,7 +118,7 @@ public class WMTSTile extends Tile {
         baseUrl = baseUrl.replace("{TileCol}", "" + tileIdentifier.getX());
         baseUrl = baseUrl.replace("{TileRow}", "" + tileIdentifier.getY());
 
-        baseUrl = replaceToken(baseUrl, "time", service.getDimensions().get(WMTSService.DIMENSION_TIME));
+        baseUrl = replaceToken(baseUrl, "time", service.getDimensions().get(WMTSTileService.DIMENSION_TIME));
 
         LOGGER.fine("Requesting tile " + tileIdentifier.getCode());
 
@@ -155,7 +156,8 @@ public class WMTSTile extends Tile {
         params.put("style",  service.getStyleName());
         params.put("format", service.getFormat());
         params.put("tilematrixset", service.getTileMatrixSetName());
-        params.put("TileMatrix", service.getTileMatrixSetName()+":"+tileIdentifier.getZ());
+//        params.put("TileMatrix", service.getTileMatrixSetName()+":"+tileIdentifier.getZ());
+        params.put("TileMatrix", tileIdentifier.getZ());
         params.put("TileCol", tileIdentifier.getX());
         params.put("TileRow", tileIdentifier.getY());
 

@@ -25,7 +25,7 @@ import javax.xml.parsers.ParserConfigurationException;
 import org.apache.commons.io.IOUtils;
 import org.geotools.data.ows.GetCapabilitiesResponse;
 import org.geotools.data.ows.HTTPResponse;
-import org.geotools.data.wmts.WMTSCapabilities;
+import org.geotools.data.wmts.model.WMTSCapabilities;
 import org.geotools.ows.ServiceException;
 import org.geotools.wmts.WMTSConfiguration;
 import org.geotools.xml.Parser;

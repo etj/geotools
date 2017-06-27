@@ -14,7 +14,7 @@
  *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *    Lesser General Public License for more details.
  */
-package org.geotools.data.wmts;
+package org.geotools.data.wmts.model;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -24,7 +24,6 @@ import java.util.Map;
 import java.util.logging.Logger;
 
 import org.geotools.data.ows.Layer;
-import org.geotools.tile.impl.wmts.TileMatrixSetLink;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
 
 /**

@@ -14,44 +14,67 @@
  *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *    Lesser General Public License for more details.
  */
-package org.geotools.tile.impl.wmts;
+package org.geotools.data.wmts.client;
 
 import java.io.File;
 import java.net.URISyntaxException;
 import java.net.URL;
+import static org.geotools.data.wmts.client.WMTSTileFactory4326Test.createCapabilities;
+import org.geotools.data.wmts.model.TileMatrixSet;
+import org.geotools.data.wmts.model.WMTSCapabilities;
+import org.geotools.data.wmts.model.WMTSLayer;
+import org.geotools.data.wmts.model.WMTSServiceType;
 import org.geotools.tile.TileIdentifier;
-import org.geotools.tile.TileIdentifierTest;
 import org.geotools.tile.impl.ZoomLevel;
+import org.junit.After;
 import org.junit.Assert;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
 import org.junit.Before;
 import org.junit.Test;
 
-public class WMTSTileIdentifierTest extends TileIdentifierTest {
-    private WMTSService service;
-    @Override
-    protected TileIdentifier createTestTileIdentifier(int z, int x, int y,
-            String name) {
+public class WMTSTileIdentifierTest {
+    private WMTSTileService service;
+
+    protected TileIdentifier tileId;
+
+    @Before
+    public void beforeTest() throws Exception {
+        this.tileId = createTestTileIdentifier(5, 10, 12, "SomeService");
+    }
+
+    @After
+    public void afterTest() {
+        this.tileId = null;
+    }
+
+    protected TileIdentifier createTestTileIdentifier(int z, int x, int y, String name) throws Exception {
         if(service==null) {
             this.setup();
         }
         return createTestTileIdentifier(new WMTSZoomLevel(z,service), x, y, name);
-    };
+    }
+
     @Before
-    public void setup() {
+    public void setup() throws Exception {
         service = createKVPService();
     }
 
-    private WMTSService createKVPService() {
+    private WMTSTileService createKVPService() throws Exception {
         try {
-            URL capaKvp = getClass().getClassLoader().getResource("getcapa_kvp.xml");
+            URL capaKvp = getClass().getClassLoader().getResource("test-data/getcapa_kvp.xml");
             assertNotNull(capaKvp);
-            File capaKvpFile = new File(capaKvp.toURI());
+            File capaFile = new File(capaKvp.toURI());
+            WMTSCapabilities capa = createCapabilities(capaFile);
 
             String baseURL = "http://demo.geo-solutions.it/geoserver/gwc/service/wmts?REQUEST=getcapabilities";
-            return new WMTSService("states", baseURL, "unesco:Unesco_point", "EPSG:4326", WMTSServiceType.KVP, capaKvpFile);
 
+            WMTSLayer layer = capa.getLayer("spearfish");
+            TileMatrixSet matrixSet = capa.getMatrixSet("EPSG:4326");
+            assertNotNull(layer);
+            assertNotNull(matrixSet);
+
+            return new WMTSTileService(baseURL, WMTSServiceType.KVP, layer, null, matrixSet);
         } catch (URISyntaxException ex) {
             fail(ex.getMessage());
             return null;
@@ -60,7 +83,6 @@ public class WMTSTileIdentifierTest extends TileIdentifierTest {
 
     @Test
     public void testGetId() {
-        
         Assert.assertEquals("SomeService_5_10_12", this.tileId.getId());
     }
 

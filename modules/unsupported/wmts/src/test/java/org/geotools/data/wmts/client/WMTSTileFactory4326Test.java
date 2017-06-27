@@ -14,45 +14,51 @@
  *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *    Lesser General Public License for more details.
  */
-package org.geotools.tile.impl.wmts;
+package org.geotools.data.wmts.client;
 
 import java.io.File;
+import java.io.FileReader;
 import java.net.URISyntaxException;
 import java.net.URL;
+import net.opengis.wmts.v_1.CapabilitiesType;
+import org.geotools.data.wmts.model.TileMatrixSet;
+import org.geotools.data.wmts.model.WMTSCapabilities;
+import org.geotools.data.wmts.model.WMTSLayer;
+import org.geotools.data.wmts.model.WMTSServiceType;
 import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.geotools.referencing.CRS;
 import org.geotools.referencing.crs.DefaultGeographicCRS;
 import org.geotools.tile.Tile;
 import org.geotools.tile.TileFactory;
-import org.geotools.tile.TileFactoryTest;
 import org.geotools.tile.TileService;
+import org.geotools.wmts.WMTSConfiguration;
+import org.geotools.xml.Parser;
 
 import org.junit.Assert;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import org.junit.Before;
 import org.junit.Test;
-import org.opengis.referencing.FactoryException;
 
-public class WMTSTileFactory4326Test extends TileFactoryTest {
-    class TestPoint {
+public class WMTSTileFactory4326Test {
+
+    protected TileFactory factory;
+
+    @Before
+    public void setUp() {
+        this.factory = createFactory();
+    }
+
+    static class TestPoint {
         double lat;
-
         double lon;
 
         int zoomlevel;
 
         int expectedRow;
-
         int expectedCol;
 
-        /**
-         * @param lat
-         * @param lon
-         * @param zoomlevel
-         * @param expectedRow
-         * @param expectedCol
-         */
         public TestPoint(double lat, double lon, int zoomlevel, int expectedRow,
                 int expectedCol) {
             super();
@@ -66,7 +72,7 @@ public class WMTSTileFactory4326Test extends TileFactoryTest {
     }
 
     @Test
-    public void testGetTileFromCoordinate() {
+    public void testGetTileFromCoordinate() throws Exception {
         int i=0;
         TileService[] services = new TileService[2];
         for (WMTSServiceType t : WMTSServiceType.values()) {
@@ -75,29 +81,43 @@ public class WMTSTileFactory4326Test extends TileFactoryTest {
 
         }
         TestPoint[] tests = {
-            new TestPoint(90, -180, 2, 0, 0),
-            new TestPoint(75, -173, 2, 0, 0),
-            new TestPoint(90, -180, 0, 0, 0),
-            new TestPoint(0, 0, 3, 3, 7),
-            new TestPoint(0, 0, 2, 1, 3),
-            new TestPoint(0, 0, 1, 0, 1),
-            new TestPoint(50, -70, 0, 0, 0),
+            new TestPoint(90, -180, 2, 0,4),
+            new TestPoint(75, -173, 2, 0,4),
+            new TestPoint(90, -180, 0, 0,1),
+            new TestPoint(0, 0, 3,     1,8),
+            new TestPoint(0, 0, 2,     0,4),
+            new TestPoint(0, 0, 1,     0,2),
+            new TestPoint(50, -70, 0,  0,1),
             new TestPoint(50, 70, 0, 0, 1),
-            new TestPoint(-50, -70, 1, 1, 1),
+            new TestPoint(-50, -70, 1, 0,2),
             new TestPoint(50, 70, 1, 0, 2),
-            new TestPoint(50, -70, 1, 0, 1),
-            new TestPoint(-50, 70, 1, 1, 2)
+            new TestPoint(50, -70, 1,  0,2),
+            new TestPoint(-50, 70, 1,  0,2)
         };
-        
+
+//        TestPoint[] tests = {
+//            new TestPoint(90, -180, 2, 1,1),
+//            new TestPoint(75, -173, 2, 1,1),
+//            new TestPoint(90, -180, 0, 0,0),
+//            new TestPoint(0, 0, 3, 2,3),
+//            new TestPoint(0, 0, 2, 1,1),
+//            new TestPoint(0, 0, 1, 0,0),
+//            new TestPoint(50, -70, 0, 0, 0),
+//            new TestPoint(50, 70, 0, 0, 0),
+//            new TestPoint(-50, -70, 1, 0, 0),
+//            new TestPoint(50, 70, 1, 0,0),
+//            new TestPoint(50, -70, 1, 0,0),
+//            new TestPoint(-50, 70, 1, 0,0)
+//        };
         for (TestPoint tp : tests) {
             for (int i1=0;i1<2;i1++) {
                 TileService service = services[i1];
                 // For some reason map proxy has an extra level compared to GeoServer!
                 int offset = 0;
-                if (((WMTSService)service).getType().equals(WMTSServiceType.REST)) {
+                if (((WMTSTileService)service).getType().equals(WMTSServiceType.REST)) {
                     offset = 1;
                 }
-                WMTSZoomLevel zoomLevel = ((WMTSService) service).getZoomLevel(tp.zoomlevel + offset);// new WMTSZoomLevel(1,(WMTSService) service);
+                WMTSZoomLevel zoomLevel = ((WMTSTileService) service).getZoomLevel(tp.zoomlevel + offset);// new WMTSZoomLevel(1,(WMTSService) service);
                 // top right
                 Tile tile = factory.findTileAtCoordinate(tp.lon, tp.lat, zoomLevel, service);
 
@@ -111,9 +131,9 @@ public class WMTSTileFactory4326Test extends TileFactoryTest {
     }
 
     @Test
-    public void testFindRightNeighbour() {
+    public void testFindRightNeighbour() throws Exception {
         for (WMTSServiceType t : WMTSServiceType.values()) {
-            WMTSService service = (WMTSService) createService(t);
+            WMTSTileService service = (WMTSTileService) createService(t);
             WMTSZoomLevel zoomLevel = service.getZoomLevel(5);
             WMTSTile tile = new WMTSTile(20, 15, zoomLevel, service);
 
@@ -128,16 +148,16 @@ public class WMTSTileFactory4326Test extends TileFactoryTest {
     }
 
     @Test
-    public void testFindLowerNeighbour() {
+    public void testFindLowerNeighbour() throws Exception {
         for (WMTSServiceType t : WMTSServiceType.values()) {
             TileService service = createService(t);
-            WMTSTile tile = new WMTSTile(10, 5, new WMTSZoomLevel(5, (WMTSService) service),
+            WMTSTile tile = new WMTSTile(10, 5, new WMTSZoomLevel(5, (WMTSTileService) service),
                     service);
 
             Tile neighbour = factory.findLowerNeighbour(tile, service);
 
             WMTSTile expectedNeighbour = new WMTSTile(10, 6,
-                    new WMTSZoomLevel(5, (WMTSService) service), service);
+                    new WMTSZoomLevel(5, (WMTSTileService) service), service);
 
             Assert.assertEquals(expectedNeighbour.getTileIdentifier(),
                     neighbour.getTileIdentifier());
@@ -146,9 +166,9 @@ public class WMTSTileFactory4326Test extends TileFactoryTest {
     }
 
     @Test
-    public void testGetExtentFromTileName() throws FactoryException {
+    public void testGetExtentFromTileName() throws Exception {
 
-        WMTSService services[] = {
+        WMTSTileService services[] = {
             createRESTService(),
             createKVPService()};
 
@@ -160,10 +180,10 @@ public class WMTSTileFactory4326Test extends TileFactoryTest {
             TileService service = services[i];
             // For some reason map proxy has an extra level compared to GeoServer!
             int offset = 0;
-            if (((WMTSService)service).getType().equals(WMTSServiceType.REST)) {
+            if (((WMTSTileService)service).getType().equals(WMTSServiceType.REST)) {
                 offset = 1;
             }
-            WMTSZoomLevel zoomLevel = ((WMTSService) service).getZoomLevel(1 + offset);
+            WMTSZoomLevel zoomLevel = ((WMTSTileService) service).getZoomLevel(1 + offset);
             WMTSTileIdentifier tileId = new WMTSTileIdentifier(1, 1,
                     zoomLevel, "SomeName");
             WMTSTile tile = new WMTSTile(tileId, service);
@@ -179,7 +199,7 @@ public class WMTSTileFactory4326Test extends TileFactoryTest {
         }
     }
 
-    private TileService createService(WMTSServiceType type) {
+    private TileService createService(WMTSServiceType type) throws Exception {
 
         if (WMTSServiceType.REST.equals(type)) {
             return createRESTService();
@@ -188,15 +208,16 @@ public class WMTSTileFactory4326Test extends TileFactoryTest {
         }
     }
 
-    private WMTSService createRESTService() {
+    private WMTSTileService createRESTService() throws Exception {
         try {
-            URL capaResource = getClass().getClassLoader().getResource("WMTSCapabilities.xml");
+            URL capaResource = getClass().getClassLoader().getResource("test-data/zamg.getcapa.xml");
             assertNotNull("Can't find REST getCapa resource", capaResource);
             File capaFile = new File(capaResource.toURI());
             assertTrue("Can't find REST getCapa file", capaFile.exists());
+            WMTSCapabilities capa = createCapabilities(capaFile);
 
             String baseURL = "XXXhttp://wmsx.zamg.ac.at/mapcacheStatmap/wmts/1.0.0/WMTSCapabilities.xml";
-            return new WMTSService("REST", baseURL, "grey", "statmap", WMTSServiceType.REST, capaFile);
+            return new WMTSTileService(baseURL, WMTSServiceType.REST, capa.getLayer("grey"), null, capa.getMatrixSet("statmap"));
 
         } catch (URISyntaxException ex) {
             fail(ex.getMessage());
@@ -204,14 +225,21 @@ public class WMTSTileFactory4326Test extends TileFactoryTest {
         }
     }
 
-    private WMTSService createKVPService() {
+    private WMTSTileService createKVPService() throws Exception {
         try {
-            URL capaKvp = getClass().getClassLoader().getResource("getcapa_kvp.xml");
+            URL capaKvp = getClass().getClassLoader().getResource("test-data/geosolutions_getcapa_kvp.xml");
             assertNotNull(capaKvp);
-            File capaKvpFile = new File(capaKvp.toURI());
+            File capaFile = new File(capaKvp.toURI());
+            WMTSCapabilities capa = createCapabilities(capaFile);
 
             String baseURL = "http://demo.geo-solutions.it/geoserver/gwc/service/wmts?REQUEST=getcapabilities";
-            return new WMTSService("KVP", baseURL, "unesco:Unesco_point", "EPSG:4326", WMTSServiceType.KVP, capaKvpFile);
+
+            WMTSLayer layer = capa.getLayer("unesco:Unesco_point");
+            TileMatrixSet matrixSet = capa.getMatrixSet("EPSG:4326");
+            assertNotNull(layer);
+            assertNotNull(matrixSet);
+
+            return new WMTSTileService(baseURL, WMTSServiceType.KVP, layer, null, matrixSet);
 
         } catch (URISyntaxException ex) {
             fail(ex.getMessage());
@@ -222,4 +250,14 @@ public class WMTSTileFactory4326Test extends TileFactoryTest {
     protected TileFactory createFactory() {
         return new WMTSTileFactory();
     }
+
+    public static  WMTSCapabilities createCapabilities(File capFile) throws Exception {
+        Parser parser = new Parser(new WMTSConfiguration());
+
+        Object object = parser.parse(new FileReader(capFile));
+        assertTrue("Capabilities failed to parse " + object.getClass(), object instanceof CapabilitiesType);
+
+        return new WMTSCapabilities((CapabilitiesType) object);
+    }
+
 }

@@ -24,7 +24,7 @@ import org.geotools.coverage.grid.io.AbstractGridFormat;
 import org.geotools.data.wms.request.GetFeatureInfoRequest;
 import org.geotools.data.wms.response.GetFeatureInfoResponse;
 import org.geotools.data.wms.xml.Dimension;
-import org.geotools.data.wmts.WMTSLayer;
+import org.geotools.data.wmts.model.WMTSLayer;
 import org.geotools.data.wmts.WebMapTileServer;
 import org.geotools.data.wmts.request.GetTileRequest;
 import org.geotools.geometry.DirectPosition2D;
@@ -141,7 +141,7 @@ public class WMTSCoverageReader extends AbstractGridCoverage2DReader {
     }
 
     final void setLayer(org.geotools.data.ows.Layer owsLayer) {
-        this.layer = (org.geotools.data.wmts.WMTSLayer) owsLayer;
+        this.layer = (org.geotools.data.wmts.model.WMTSLayer) owsLayer;
 
         if (srsName == null) { // initialize from first (unique) layer
 
