@@ -114,8 +114,10 @@ public class WMTSTile extends Tile {
 
     private URL getRESTurl(String baseUrl, TileIdentifier tileIdentifier) throws RuntimeException
     {
+        String tileMatrix = service.getTileMatrix(tileIdentifier.getZ()).getIdentifier();
+
         baseUrl = baseUrl.replace("{TileMatrixSet}", service.getTileMatrixSetName());
-        baseUrl = baseUrl.replace("{TileMatrix}", "" + tileIdentifier.getZ());
+        baseUrl = baseUrl.replace("{TileMatrix}", "" + tileMatrix);
         baseUrl = baseUrl.replace("{TileCol}", "" + tileIdentifier.getX());
         baseUrl = baseUrl.replace("{TileRow}", "" + tileIdentifier.getY());
 
@@ -158,12 +160,13 @@ public class WMTSTile extends Tile {
         params.put("format", service.getFormat());
         params.put("tilematrixset", service.getTileMatrixSetName());
 //        params.put("TileMatrix", service.getTileMatrixSetName()+":"+tileIdentifier.getZ());
-        params.put("TileMatrix", tileIdentifier.getZ());
+//        params.put("TileMatrix", tileIdentifier.getZ());
+        params.put("TileMatrix", service.getTileMatrix(tileIdentifier.getZ()).getIdentifier());
         params.put("TileCol", tileIdentifier.getX());
         params.put("TileRow", tileIdentifier.getY());
 
         StringBuilder arguments = new StringBuilder();
-        for(Object p:params.keySet()) {
+        for(String p:params.keySet()) {
             try {
                 arguments.append(p).append("=").append(URLEncoder.encode(params.get(p).toString(),"UTF-8"));
                 arguments.append('&');
