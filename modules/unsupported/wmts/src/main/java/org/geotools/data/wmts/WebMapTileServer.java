@@ -18,6 +18,7 @@ package org.geotools.data.wmts;
 
 import java.io.IOException;
 import java.net.URL;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
@@ -47,7 +48,9 @@ import org.opengis.referencing.crs.CoordinateReferenceSystem;
 public class WebMapTileServer extends AbstractOpenWebService<WMTSCapabilities, Layer> {
 
     private WMTSServiceType type;
-    
+
+    private final Map<String, String> headers = new HashMap<>();
+
     /**
      * @param serverURL
      * @param httpClient
@@ -142,15 +145,22 @@ public class WebMapTileServer extends AbstractOpenWebService<WMTSCapabilities, L
      * @return
      */
     public GetTileRequest createGetTileRequest() {
+
+        GetTileRequest request;
+
         if (WMTSServiceType.KVP.equals(type)) {
             URL onlineResource = findURL(getCapabilities().getRequest().getGetTile());
 
-            return (GetTileRequest) ((WMTSSpecification) specification)
+            request =  (GetTileRequest) ((WMTSSpecification) specification)
                     .createGetTileRequest(onlineResource, (Properties) null, capabilities);
         } else {
-            return (GetTileRequest) ((WMTSSpecification) specification)
+            request = (GetTileRequest) ((WMTSSpecification) specification)
                     .createGetTileRequest(serverURL, (Properties) null, capabilities);
         }
+
+        request.getHeaders().putAll(headers);
+        
+        return request;
     }
 
     private URL findURL(OperationType operation) {
@@ -192,6 +202,10 @@ public class WebMapTileServer extends AbstractOpenWebService<WMTSCapabilities, L
 
     public WMTSServiceType getType() {
         return type;
+    }
+
+    public Map<String, String> getHeaders() {
+        return headers;
     }
 
     /**

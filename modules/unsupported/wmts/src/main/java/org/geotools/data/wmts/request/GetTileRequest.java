@@ -16,6 +16,7 @@
  */
 package org.geotools.data.wmts.request;
 
+import java.util.Map;
 import java.util.Set;
 import org.geotools.data.ows.Layer;
 
@@ -74,16 +75,19 @@ public interface GetTileRequest extends Request {
      */
 //    public void setVersion(String version);
 
-    public void setLayer(WMTSLayer layer);
+    void setLayer(WMTSLayer layer);
 
-    public void setStyle(String styleName);
+    void setStyle(String styleName);
 
-    public Set<Tile> getTiles() throws ServiceException;
+    Set<Tile> getTiles() throws ServiceException;
 
-    public void setRequestedHeight(int height);
-    public void setRequestedWidth(int width);
-    public void setRequestedBBox(ReferencedEnvelope bbox);
-    public void setRequestedTime(String time);
+    void setRequestedHeight(int height);
+    void setRequestedWidth(int width);
+    void setRequestedBBox(ReferencedEnvelope bbox);
+    void setRequestedTime(String time);
 
-    public void setCRS(CoordinateReferenceSystem coordinateReferenceSystem);
+    void setCRS(CoordinateReferenceSystem coordinateReferenceSystem);
+
+    /** HTTP headers required for some WMTS **/
+    Map<String, String> getHeaders();
 }

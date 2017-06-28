@@ -88,6 +88,8 @@ public class WMTSTileService extends TileService {
     public static final String DIMENSION_TIME = "time";
     public static final String DIMENSION_ELEVATION = "elevation";
 
+    public static final String EXTRA_HEADERS = "HEADERS";
+
     private static final TileFactory tileFactory = new WMTSTileFactory();
 
     private String tileMatrixSetName = "";
@@ -170,9 +172,6 @@ public class WMTSTileService extends TileService {
 
 //        setTileMatrixSetName(tileMatrixSet.getIdentifier());
 
-        Map<String,String> headers = new HashMap<>();
-        headers.put("Referer", "https://agrigis.ch/");
-        extrainfo.put("HEADERS", headers);
     }
 
     private static double[] buildScaleList(TileMatrixSet tileMatrixSet) {

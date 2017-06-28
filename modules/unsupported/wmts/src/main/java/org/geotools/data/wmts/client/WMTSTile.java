@@ -27,6 +27,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Level;
 import javax.imageio.ImageIO;
+import org.apache.commons.collections.MapUtils;
 import org.apache.commons.httpclient.HttpClient;
 import org.apache.commons.httpclient.HttpMethod;
 import org.apache.commons.httpclient.methods.GetMethod;
@@ -200,7 +201,7 @@ public class WMTSTile extends Tile {
 
     public BufferedImage doLoadImageTileImage(Tile tile) throws IOException {
 
-        Map<String, String> headers = (Map<String, String>)this.service.getExtrainfo().get("HEADERS");
+        Map<String, String> headers = (Map<String, String>)this.service.getExtrainfo().get(WMTSTileService.EXTRA_HEADERS);
         InputStream is = null;
         try {
             is = setupInputStream(getUrl(), headers);
@@ -218,9 +219,11 @@ public class WMTSTile extends Tile {
         LOGGER.log(Level.FINE, "URL is "+ uri);
 
         HttpMethod get = new GetMethod(uri);
-        if(headers != null) {
+        if(MapUtils.isNotEmpty(headers)) {
             for (String headerName : headers.keySet()) {
-                LOGGER.log(Level.FINE, "Adding header " +  headerName +" = " + headers.get(headerName));
+                if(LOGGER.isLoggable(Level.FINE)) {
+                    LOGGER.log(Level.FINE, "Adding header " +  headerName +" = " + headers.get(headerName));
+                }
                 get.addRequestHeader(headerName, headers.get(headerName));
             }
         }

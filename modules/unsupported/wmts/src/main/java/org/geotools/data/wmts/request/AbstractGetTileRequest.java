@@ -21,6 +21,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -98,6 +99,8 @@ public abstract class AbstractGetTileRequest extends AbstractWMTSRequest
 
     private CoordinateReferenceSystem crs;
 
+    private final Map<String, String> headers = new HashMap<>();
+
     /**
      * Constructs a GetMapRequest. The data passed in represents valid values that can be used.
      * 
@@ -144,6 +147,10 @@ public abstract class AbstractGetTileRequest extends AbstractWMTSRequest
 
     public void setRequestedTime(String requestedTime) {
         this.requestedTime = requestedTime;
+    }
+
+    public Map<String, String> getHeaders() {
+        return headers;
     }
 
 //    @Override
@@ -228,9 +235,12 @@ public abstract class AbstractGetTileRequest extends AbstractWMTSRequest
         }
 
         WMTSTileService wmtsService = new WMTSTileService(requestUrl, type, layer, styleString, matrixSet);
-        
+
         wmtsService.getDimensions().put(WMTSTileService.DIMENSION_TIME, requestedTime);
 
+        ((Map)(wmtsService.getExtrainfo()
+                .computeIfAbsent(WMTSTileService.EXTRA_HEADERS, extra -> new HashMap<>())
+                )).putAll(this.headers);
 
         // zoomLevel = factory.getZoomLevel(zoom, wmtsService);
         int scale = 0;
