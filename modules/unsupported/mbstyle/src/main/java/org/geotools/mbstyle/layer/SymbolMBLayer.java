@@ -16,38 +16,16 @@
  */
 package org.geotools.mbstyle.layer;
 
-import java.awt.Color;
-import java.awt.Point;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
-
-import javax.measure.unit.NonSI;
-
+import com.google.common.collect.ImmutableSet;
 import org.geotools.mbstyle.MBStyle;
 import org.geotools.mbstyle.parse.MBFilter;
 import org.geotools.mbstyle.parse.MBFormatException;
 import org.geotools.mbstyle.parse.MBObjectParser;
 import org.geotools.mbstyle.sprite.SpriteGraphicFactory;
 import org.geotools.mbstyle.transform.MBStyleTransformer;
-import org.geotools.styling.AnchorPoint;
-import org.geotools.styling.Displacement;
-import org.geotools.styling.ExternalGraphic;
-import org.geotools.styling.FeatureTypeStyle;
-import org.geotools.styling.Fill;
+import org.geotools.styling.*;
 import org.geotools.styling.Font;
-import org.geotools.styling.Graphic;
-import org.geotools.styling.Halo;
-import org.geotools.styling.LabelPlacement;
-import org.geotools.styling.LinePlacement;
-import org.geotools.styling.Mark;
-import org.geotools.styling.PointPlacement;
-import org.geotools.styling.Rule;
 import org.geotools.styling.Stroke;
-import org.geotools.styling.StyleBuilder;
-import org.geotools.styling.TextSymbolizer2;
 import org.geotools.text.Text;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
@@ -56,8 +34,10 @@ import org.opengis.filter.expression.Literal;
 import org.opengis.style.GraphicalSymbol;
 import org.opengis.style.SemanticType;
 import org.opengis.style.Symbolizer;
-
-import com.google.common.collect.ImmutableSet;
+import javax.measure.unit.NonSI;
+import java.awt.*;
+import java.util.*;
+import java.util.List;
 
 /**
  * A symbol.
@@ -833,16 +813,30 @@ public class SymbolMBLayer extends MBLayer {
     }
 
     /**
+     *
+     * @return True if the layer has a text-field explicitly provided.
+     */
+    private boolean hasTextField() throws MBFormatException {
+        return parse.isPropertyDefined(layout, "text-field");
+    }
+
+    /**
      * (Optional) Font stack to use for displaying text. 
      * 
      * Defaults to <code>["Open Sans Regular","Arial Unicode MS Regular"]</code>. Requires text-field. 
      *
      * @return The font to use for the label
      */
+
     public List<String> getTextFont() {
-        String[] fonts = parse.array(String.class, layout, "text-font",
-                new String[] { "Open Sans Regular", "Arial Unicode MS Regular" });
-        return Arrays.asList(fonts); 
+        String[] fonts;
+        if (layout.get("text-font") instanceof JSONObject) {
+            return null;
+        } else {
+            fonts = parse.array(String.class, layout, "text-font",
+                    new String[]{"Open Sans Regular", "Arial Unicode MS Regular"});
+            return Arrays.asList(fonts);
+        }
     }
 
     /**
@@ -850,13 +844,9 @@ public class SymbolMBLayer extends MBLayer {
      *
      * @return The font to use for the label
      */
-    public List<Expression> textFont() {
-        List<Expression> fontExpressions = new ArrayList<>();
-        String[] fonts = parse.array(String.class, layout, "text-font", new String[] {"Open Sans Regular","Arial Unicode MS Regular"});
-        for (int i = 0; i < fonts.length; i++) {
-            fontExpressions.add(ff.literal(fonts[i]));
-        }
-        return fontExpressions;
+
+    public Expression textFont() throws MBFormatException {
+        return parse.font(layout, "text-font");
     }
 
     /**
@@ -1670,7 +1660,6 @@ public class SymbolMBLayer extends MBLayer {
      * @return FeatureTypeStyle
      */
     public List<FeatureTypeStyle> transformInternal(MBStyle styleContext) {
-
         MBStyleTransformer transformer = new MBStyleTransformer(parse);
         StyleBuilder sb = new StyleBuilder();
         List<Symbolizer> symbolizers = new ArrayList<Symbolizer>();
@@ -1714,11 +1703,15 @@ public class SymbolMBLayer extends MBLayer {
 
 
         Font font = sb.createFont(ff.literal(""), ff.literal("normal"), ff.literal("normal"), textSize());
+
         if (getTextFont() != null) {
             font.getFamily().clear();
             for (String textFont : getTextFont()) {
                 font.getFamily().add(ff.literal(textFont));
             }
+        } else if (textFont() != null) {
+            font.getFamily().clear();
+            font.getFamily().add(textFont());
         }
 
 
@@ -1733,7 +1726,6 @@ public class SymbolMBLayer extends MBLayer {
                 textExpression = transformer.cqlExpressionFromTokens(text);
             }
         }
-        
         textExpression = ff.function("StringTransform", textExpression, textTransform());
 
         TextSymbolizer2 symbolizer = (TextSymbolizer2) sf.textSymbolizer(getId(),
@@ -1748,6 +1740,7 @@ public class SymbolMBLayer extends MBLayer {
         // throw MBFormatException if point placement
         if(labelPlacement instanceof LinePlacement){
             // followLine will be true if line placement, it is an implied default of MBstyles.
+            symbolizer.getOptions().put("forceLeftToRight", String.valueOf(textKeepUpright()));
             symbolizer.getOptions().put("followLine", "true");
             symbolizer.getOptions().put("maxAngleDelta", String.valueOf(getTextMaxAngle()));
         } else if (hasTextMaxAngle()) {
@@ -1776,6 +1769,21 @@ public class SymbolMBLayer extends MBLayer {
                     "none");
         }
 
+        // MapBox symbol-avoid-edges defaults to false, If true, the symbols will not cross tile edges to avoid
+        // mutual collisions.  This concept is represented by using the Partials option in GeoTools.  The partials
+        // options instructs the renderer to render labels that cross the map extent, which are normally not painted
+        // since there is no guarantee that a map put on the side of the current one (tiled rendering) will contain
+        // the other half of the label. By enabling “partials” the style editor takes responsibility for the other
+        // half being there (maybe because the label points have been placed by hand and are assured not to conflict
+        // with each other, at all zoom levels).
+        //
+        // Based upon the above if symbol-avoid-edges is true we do not need
+        // to add the partials option as the renderer will do this by default. But if symbol-avoid-edges is missing or
+        // set to false, then we do need to add the partials option set to true.
+        if (!getSymbolAvoidEdges()){
+            symbolizer.getOptions().put("partials", "true");
+        }
+
         //Mapbox allows you to sapecify an array of values, one for each side
         if (getIconTextFitPadding() != null && !getIconTextFitPadding().isEmpty()) {
             symbolizer.getOptions().put("graphic-margin",
@@ -1784,6 +1792,10 @@ public class SymbolMBLayer extends MBLayer {
             symbolizer.getOptions().put("graphic-margin", "0");
         }
 
+        // text-padding default value is 2 in mapbox, will override Geoserver defaults
+        if(!hasIconImage() || "point".equalsIgnoreCase(symbolPlacementVal.trim()) || (getTextPadding().doubleValue()) >= (getIconPadding().doubleValue())) { 
+            symbolizer.getOptions().put("spaceAround", String.valueOf(getTextPadding()));
+        }
         // halo blur
         // layer.textHaloBlur();
 
@@ -1800,6 +1812,18 @@ public class SymbolMBLayer extends MBLayer {
 
         // If the layer has an icon image, add it to our symbolizer
         if (hasIconImage()) {
+            // icon-ignore-placement requires an icon-image so we handle this property here.
+            // By default - or icon-ignore-placement: false, MapBox prevents symbols from being visible if they collide
+            // with other icons.  GeoServer only implements this behavior if the vendorOption labelObstacle is set
+            // to true.
+            if (!getIconIgnorePlacement()) {
+                symbolizer.getOptions().put("labelObstacle", "true");
+            }
+
+            //Check to see that hasTextField() is true check to see if IconPadding is greater to put to spaceAround
+            if (!hasTextField() || ((getIconPadding().doubleValue()) > (getTextPadding().doubleValue())) && !"point".equalsIgnoreCase(symbolPlacementVal.trim())) {
+                symbolizer.getOptions().put("spaceAround", String.valueOf(getIconPadding()));
+            }
             // If we have an icon with a Point placement create a PointSymoblizer for the icon.
             // This enables adjusting the text placement without moving the icon.
             if ("point".equalsIgnoreCase(symbolPlacementVal.trim())) {
@@ -1811,7 +1835,12 @@ public class SymbolMBLayer extends MBLayer {
 
                 symbolizer.setGraphic(getGraphic(transformer, styleContext));
             }
-                     
+        }
+
+        // Check that a labelObstacle vendor option hasn't already been placed on the symbolizer and that
+        // textIgnorePlacement is either null or false, if so add it.  If textIgnorePlacement is true, accept default behavior.
+        if (symbolizer.getOptions().get("labelObstacle") == null && !getTextIgnorePlacement()) {
+            symbolizer.getOptions().put("labelObstacle", "true");
         }
 
         symbolizers.add(symbolizer);

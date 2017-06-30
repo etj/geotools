@@ -651,7 +651,7 @@ public final class GridCoverageRenderer {
             iw.affine(finalRasterTransformation, interpolation, bkgValues);
             im = iw.getRenderedImage();
             roi = iw.getROI();
-            noData = iw.getNoData();
+            noData = iw.extractNoDataProperty(im);
         } finally {
                 if(DEBUG){
                     writeRenderedImage(im, "postAffine");
@@ -1352,6 +1352,7 @@ public final class GridCoverageRenderer {
                 SelectedChannelTypeImpl channel = new SelectedChannelTypeImpl();
                 channel.setChannelName(Integer.toString(i + 1));
                 channel.setContrastEnhancement(originalChannel.getContrastEnhancement());
+                channels[i] = channel;
                 i++;
             }
             ChannelSelectionUpdateStyleVisitor channelsUpdateVisitor = new ChannelSelectionUpdateStyleVisitor(channels);
