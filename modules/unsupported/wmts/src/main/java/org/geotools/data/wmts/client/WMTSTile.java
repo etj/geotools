@@ -57,15 +57,13 @@ public class WMTSTile extends Tile {
      **/
     private static ObjectCache tileImages = ObjectCaches.create("soft", 150);
 
-    WMTSServiceType type = WMTSServiceType.REST;
+    private final WMTSServiceType type;
 
-    private WMTSTileService service;
+    private final WMTSTileService service;
 
 
     public WMTSTile(int x, int y, ZoomLevel zoomLevel, TileService service) {
         this(new WMTSTileIdentifier(x, y, zoomLevel, service.getName()), service);
-        this.service = (WMTSTileService) service;
-        setType(this.service.getType());
     }
 
     /**
@@ -76,7 +74,7 @@ public class WMTSTile extends Tile {
         super(tileIdentifier, WMTSTileFactory.getExtentFromTileName(tileIdentifier, service),
                 DEFAULT_TILE_SIZE);
         this.service = (WMTSTileService) service;
-        setType(this.service.getType());
+        this.type = this.service.getType();
     }
 
     /**
@@ -85,15 +83,6 @@ public class WMTSTile extends Tile {
     public WMTSServiceType getType() {
         return type;
     }
-
-    /**
-     * @param type the type to set
-     */
-    public void setType(WMTSServiceType type) {
-        this.type = type;
-    }
-
-
 
     @Override
     public URL getUrl() {
