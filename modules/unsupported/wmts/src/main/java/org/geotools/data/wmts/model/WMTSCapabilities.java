@@ -218,8 +218,10 @@ public class WMTSCapabilities extends Capabilities {
                         d.setUnitSymbol(dimensionType.getUnitSymbol());
                         d.setCurrent(dimensionType.isCurrent());
 
-                        Extent e = new Extent(dimIdentifier, dimDefault, false, false, dimDefault);
-                        // TODO: store all possibile values
+                        // TODO: improve values encoding
+                        String dimValues = String.join(",", dimensionType.getValue());
+
+                        Extent e = new Extent(dimIdentifier, dimDefault, false, false, dimValues);
                         d.setExtent(e);
 
                         layer.getLayerDimensions().add(d);
